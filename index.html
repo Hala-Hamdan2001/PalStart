@@ -1,0 +1,1361 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Bad Friend</title>
+  <style>
+    /* ─── Reset & Base ─────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --lavender:       #c4b5fd;
+      --lavender-light: #ede9fe;
+      --lavender-mid:   #a78bfa;
+      --blue:           #60a5fa;
+      --blue-light:     #dbeafe;
+      --indigo:         #818cf8;
+      --pink:           #f0abfc;
+      --white:          #ffffff;
+      --surface:        #f8f7ff;
+      --surface2:       #f0eeff;
+      --text-primary:   #1e1b4b;
+      --text-secondary: #6b7280;
+      --text-muted:     #9ca3af;
+      --border:         #e5e7eb;
+      --shadow-sm:      0 1px 3px rgba(139,92,246,.08), 0 1px 2px rgba(139,92,246,.04);
+      --shadow-md:      0 4px 16px rgba(139,92,246,.12), 0 2px 6px rgba(139,92,246,.08);
+      --shadow-lg:      0 10px 40px rgba(139,92,246,.18);
+      --radius-sm:      10px;
+      --radius-md:      16px;
+      --radius-lg:      24px;
+      --radius-xl:      32px;
+      --nav-h:          72px;
+      --header-h:       64px;
+      --transition:     all .22s cubic-bezier(.4,0,.2,1);
+    }
+    html, body {
+      height: 100%;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', Helvetica, Arial, sans-serif;
+      background: var(--surface);
+      color: var(--text-primary);
+      overflow: hidden;
+    }
+
+    /* ─── App Shell ────────────────────────────────── */
+    #app {
+      display: flex;
+      flex-direction: column;
+      height: 100dvh;
+      max-width: 430px;
+      margin: 0 auto;
+      position: relative;
+      background: var(--white);
+      box-shadow: var(--shadow-lg);
+      overflow: hidden;
+    }
+
+    /* ─── Header ───────────────────────────────────── */
+    .header {
+      height: var(--header-h);
+      background: var(--white);
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      border-bottom: 1px solid var(--border);
+      position: relative;
+      z-index: 10;
+      flex-shrink: 0;
+    }
+    .header-logo {
+      width: 36px;
+      height: 36px;
+      background: linear-gradient(135deg, var(--lavender-mid), var(--indigo));
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      margin-right: 10px;
+      flex-shrink: 0;
+    }
+    .header-title { font-size: 18px; font-weight: 700; color: var(--text-primary); letter-spacing: -.3px; }
+    .header-subtitle { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
+    .header-actions { margin-left: auto; display: flex; gap: 8px; }
+    .header-badge {
+      background: var(--lavender-light);
+      color: var(--lavender-mid);
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 20px;
+    }
+
+    /* ─── Screens ──────────────────────────────────── */
+    .screens {
+      flex: 1;
+      overflow: hidden;
+      position: relative;
+    }
+    .screen {
+      position: absolute;
+      inset: 0;
+      overflow-y: auto;
+      padding: 0 0 16px;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(8px);
+      transition: opacity .25s ease, transform .25s ease;
+      -webkit-overflow-scrolling: touch;
+    }
+    .screen.active {
+      opacity: 1;
+      pointer-events: all;
+      transform: translateY(0);
+    }
+
+    /* ─── Bottom Nav ───────────────────────────────── */
+    .bottom-nav {
+      height: var(--nav-h);
+      background: var(--white);
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 4px;
+      flex-shrink: 0;
+      position: relative;
+      z-index: 10;
+    }
+    .nav-item {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      padding: 8px 4px;
+      cursor: pointer;
+      border-radius: var(--radius-md);
+      transition: var(--transition);
+      -webkit-tap-highlight-color: transparent;
+    }
+    .nav-item:active { transform: scale(.93); }
+    .nav-icon {
+      width: 28px;
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 8px;
+      font-size: 17px;
+      transition: var(--transition);
+    }
+    .nav-item.active .nav-icon {
+      background: var(--lavender-light);
+      transform: scale(1.08);
+    }
+    .nav-label {
+      font-size: 10px;
+      font-weight: 500;
+      color: var(--text-muted);
+      transition: var(--transition);
+    }
+    .nav-item.active .nav-label { color: var(--lavender-mid); font-weight: 700; }
+
+    /* ─── Section Title ────────────────────────────── */
+    .section-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: .6px;
+      padding: 20px 20px 8px;
+    }
+
+    /* ─── Cards ────────────────────────────────────── */
+    .card {
+      background: var(--white);
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow-sm);
+      padding: 16px;
+      margin: 0 16px 12px;
+      transition: var(--transition);
+    }
+    .card:active { transform: scale(.99); }
+
+    /* ─────────────────────────────────────────────── */
+    /*  HOME SCREEN                                     */
+    /* ─────────────────────────────────────────────── */
+    .home-hero {
+      background: linear-gradient(145deg, #7c3aed 0%, #6366f1 50%, #818cf8 100%);
+      margin: 16px 16px 0;
+      border-radius: var(--radius-lg);
+      padding: 24px 20px;
+      color: var(--white);
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 8px 32px rgba(124,58,237,.35);
+    }
+    .home-hero::before {
+      content: '';
+      position: absolute;
+      top: -30px; right: -20px;
+      width: 160px; height: 160px;
+      background: rgba(255,255,255,.08);
+      border-radius: 50%;
+    }
+    .home-hero::after {
+      content: '';
+      position: absolute;
+      bottom: -40px; left: -20px;
+      width: 120px; height: 120px;
+      background: rgba(255,255,255,.05);
+      border-radius: 50%;
+    }
+    .hero-greeting { font-size: 13px; opacity: .8; margin-bottom: 4px; }
+    .hero-name { font-size: 26px; font-weight: 800; letter-spacing: -.5px; }
+    .hero-sub { font-size: 13px; opacity: .75; margin-top: 4px; }
+    .hero-mood-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 18px;
+      flex-wrap: wrap;
+    }
+    .hero-mood-chip {
+      background: rgba(255,255,255,.18);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255,255,255,.25);
+      border-radius: 20px;
+      padding: 5px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--white);
+      cursor: pointer;
+      transition: var(--transition);
+    }
+    .hero-mood-chip:active { transform: scale(.95); background: rgba(255,255,255,.28); }
+
+    .quick-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin: 12px 16px 0;
+    }
+    .quick-card {
+      background: var(--white);
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow-sm);
+      padding: 16px;
+      cursor: pointer;
+      transition: var(--transition);
+      -webkit-tap-highlight-color: transparent;
+    }
+    .quick-card:active { transform: scale(.97); box-shadow: var(--shadow-md); }
+    .quick-icon {
+      width: 40px; height: 40px;
+      border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px;
+      margin-bottom: 10px;
+    }
+    .quick-card-title { font-size: 13px; font-weight: 700; color: var(--text-primary); }
+    .quick-card-sub { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+    .stat-row {
+      display: flex;
+      gap: 10px;
+      margin: 12px 16px 0;
+    }
+    .stat-chip {
+      flex: 1;
+      background: var(--surface);
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border);
+      padding: 14px 12px;
+      text-align: center;
+    }
+    .stat-num { font-size: 22px; font-weight: 800; color: var(--lavender-mid); }
+    .stat-label { font-size: 11px; color: var(--text-muted); margin-top: 2px; font-weight: 500; }
+
+    /* ─────────────────────────────────────────────── */
+    /*  TASKS SCREEN                                    */
+    /* ─────────────────────────────────────────────── */
+    .task-input-row {
+      display: flex;
+      gap: 8px;
+      padding: 16px 16px 8px;
+    }
+    .task-input {
+      flex: 1;
+      background: var(--surface);
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 12px 14px;
+      font-size: 14px;
+      color: var(--text-primary);
+      outline: none;
+      transition: var(--transition);
+      font-family: inherit;
+    }
+    .task-input:focus { border-color: var(--lavender-mid); background: var(--white); box-shadow: 0 0 0 3px rgba(167,139,250,.12); }
+    .task-input::placeholder { color: var(--text-muted); }
+    .btn-add {
+      width: 46px; height: 46px;
+      background: linear-gradient(135deg, var(--lavender-mid), var(--indigo));
+      border: none;
+      border-radius: var(--radius-md);
+      color: white;
+      font-size: 22px;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 4px 12px rgba(167,139,250,.35);
+      transition: var(--transition);
+      flex-shrink: 0;
+    }
+    .btn-add:active { transform: scale(.93); }
+
+    .tasks-filter-row {
+      display: flex;
+      gap: 6px;
+      padding: 0 16px 12px;
+    }
+    .filter-chip {
+      padding: 5px 14px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      border: 1.5px solid var(--border);
+      background: var(--white);
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: var(--transition);
+    }
+    .filter-chip.active {
+      background: var(--lavender-light);
+      border-color: var(--lavender-mid);
+      color: var(--lavender-mid);
+    }
+
+    .task-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: var(--white);
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow-sm);
+      padding: 14px 14px;
+      margin: 0 16px 8px;
+      transition: var(--transition);
+      animation: slideIn .2s ease;
+    }
+    @keyframes slideIn { from { opacity:0; transform:translateY(-6px); } to { opacity:1; transform:translateY(0); } }
+    .task-item.completed { opacity: .55; }
+    .task-check {
+      width: 22px; height: 22px;
+      border-radius: 7px;
+      border: 2px solid var(--lavender);
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: var(--transition);
+      flex-shrink: 0;
+    }
+    .task-check.checked {
+      background: linear-gradient(135deg, var(--lavender-mid), var(--indigo));
+      border-color: transparent;
+    }
+    .task-check.checked::after { content: '✓'; color: white; font-size: 13px; font-weight: 700; }
+    .task-text { flex: 1; font-size: 14px; line-height: 1.4; }
+    .task-item.completed .task-text { text-decoration: line-through; }
+    .task-del {
+      width: 28px; height: 28px;
+      border: none; background: none;
+      color: var(--text-muted);
+      font-size: 15px;
+      cursor: pointer;
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      transition: var(--transition);
+      flex-shrink: 0;
+    }
+    .task-del:hover { background: #fee2e2; color: #ef4444; }
+    .empty-state {
+      text-align: center;
+      padding: 48px 24px;
+      color: var(--text-muted);
+    }
+    .empty-state .empty-icon { font-size: 48px; margin-bottom: 12px; }
+    .empty-state p { font-size: 14px; line-height: 1.5; }
+
+    /* ─────────────────────────────────────────────── */
+    /*  CHAT SCREEN                                     */
+    /* ─────────────────────────────────────────────── */
+    #screen-chat {
+      display: flex;
+      flex-direction: column;
+      padding: 0;
+    }
+    #screen-chat.active { display: flex; }
+    .chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px 16px 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      -webkit-overflow-scrolling: touch;
+    }
+    .msg {
+      display: flex;
+      flex-direction: column;
+      max-width: 82%;
+      animation: msgIn .2s ease;
+    }
+    @keyframes msgIn { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
+    .msg.user { align-self: flex-end; align-items: flex-end; }
+    .msg.ai { align-self: flex-start; align-items: flex-start; }
+    .msg-bubble {
+      padding: 11px 14px;
+      border-radius: 18px;
+      font-size: 14px;
+      line-height: 1.55;
+      word-break: break-word;
+    }
+    .msg.user .msg-bubble {
+      background: linear-gradient(135deg, var(--lavender-mid), var(--indigo));
+      color: white;
+      border-bottom-right-radius: 5px;
+    }
+    .msg.ai .msg-bubble {
+      background: var(--surface2);
+      color: var(--text-primary);
+      border: 1px solid var(--border);
+      border-bottom-left-radius: 5px;
+    }
+    .msg-time { font-size: 10px; color: var(--text-muted); margin-top: 3px; padding: 0 4px; }
+
+    .typing-indicator {
+      display: flex;
+      gap: 4px;
+      padding: 12px 14px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      border-bottom-left-radius: 5px;
+      width: fit-content;
+    }
+    .typing-dot {
+      width: 7px; height: 7px;
+      background: var(--lavender-mid);
+      border-radius: 50%;
+      animation: typingBounce 1.2s ease-in-out infinite;
+    }
+    .typing-dot:nth-child(2) { animation-delay: .2s; }
+    .typing-dot:nth-child(3) { animation-delay: .4s; }
+    @keyframes typingBounce {
+      0%, 60%, 100% { transform: translateY(0); opacity: .5; }
+      30% { transform: translateY(-6px); opacity: 1; }
+    }
+
+    .chat-input-area {
+      padding: 10px 12px;
+      background: var(--white);
+      border-top: 1px solid var(--border);
+      display: flex;
+      gap: 8px;
+      align-items: flex-end;
+    }
+    .chat-input-wrap {
+      flex: 1;
+      background: var(--surface);
+      border: 1.5px solid var(--border);
+      border-radius: 22px;
+      display: flex;
+      align-items: flex-end;
+      padding: 2px 14px 2px 14px;
+      transition: var(--transition);
+    }
+    .chat-input-wrap:focus-within { border-color: var(--lavender-mid); background: var(--white); }
+    #chat-input {
+      flex: 1;
+      background: none;
+      border: none;
+      outline: none;
+      font-size: 14px;
+      color: var(--text-primary);
+      resize: none;
+      max-height: 96px;
+      min-height: 38px;
+      padding: 9px 0;
+      font-family: inherit;
+      line-height: 1.4;
+    }
+    #chat-input::placeholder { color: var(--text-muted); }
+    .chat-btn {
+      width: 42px; height: 42px;
+      border: none;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+      transition: var(--transition);
+      flex-shrink: 0;
+    }
+    .chat-btn:active { transform: scale(.92); }
+    #mic-btn {
+      background: var(--surface2);
+      color: var(--text-secondary);
+      font-size: 18px;
+    }
+    #mic-btn.recording {
+      background: #fee2e2;
+      color: #ef4444;
+      animation: pulse 1s ease infinite;
+    }
+    @keyframes pulse { 0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.3);} 50%{box-shadow:0 0 0 8px rgba(239,68,68,0);} }
+    #send-btn {
+      background: linear-gradient(135deg, var(--lavender-mid), var(--indigo));
+      color: white;
+      font-size: 18px;
+      box-shadow: 0 4px 12px rgba(167,139,250,.35);
+    }
+    #send-btn:disabled { opacity: .45; box-shadow: none; cursor: not-allowed; }
+
+    .chat-welcome {
+      text-align: center;
+      padding: 24px 24px 16px;
+    }
+    .chat-welcome-icon {
+      width: 64px; height: 64px;
+      background: linear-gradient(135deg, var(--lavender-mid), var(--indigo));
+      border-radius: 20px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 30px;
+      margin: 0 auto 12px;
+    }
+    .chat-welcome h3 { font-size: 16px; font-weight: 700; color: var(--text-primary); }
+    .chat-welcome p { font-size: 13px; color: var(--text-muted); margin-top: 4px; line-height: 1.5; }
+    .chat-starters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      justify-content: center;
+      margin-top: 12px;
+    }
+    .starter-chip {
+      background: var(--lavender-light);
+      color: var(--lavender-mid);
+      border: 1px solid var(--lavender);
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 500;
+      padding: 5px 12px;
+      cursor: pointer;
+      transition: var(--transition);
+    }
+    .starter-chip:active { transform: scale(.95); background: var(--lavender); color: white; }
+
+    /* ─────────────────────────────────────────────── */
+    /*  MOOD SCREEN                                     */
+    /* ─────────────────────────────────────────────── */
+    .mood-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      padding: 8px 16px 0;
+    }
+    .mood-option {
+      background: var(--white);
+      border: 2px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 18px 12px;
+      text-align: center;
+      cursor: pointer;
+      transition: var(--transition);
+      -webkit-tap-highlight-color: transparent;
+    }
+    .mood-option:active { transform: scale(.96); }
+    .mood-option.selected { border-width: 2px; }
+    .mood-option[data-mood="happy"].selected { border-color: #f59e0b; background: #fef9c3; }
+    .mood-option[data-mood="neutral"].selected { border-color: var(--blue); background: var(--blue-light); }
+    .mood-option[data-mood="sad"].selected { border-color: var(--lavender-mid); background: var(--lavender-light); }
+    .mood-option[data-mood="stressed"].selected { border-color: #f87171; background: #fee2e2; }
+    .mood-emoji { font-size: 36px; margin-bottom: 6px; }
+    .mood-label { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+
+    .mood-note-wrap { padding: 12px 16px 0; }
+    .mood-note {
+      width: 100%;
+      background: var(--surface);
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 12px 14px;
+      font-size: 14px;
+      color: var(--text-primary);
+      resize: none;
+      outline: none;
+      font-family: inherit;
+      transition: var(--transition);
+      height: 80px;
+    }
+    .mood-note:focus { border-color: var(--lavender-mid); background: var(--white); }
+    .mood-note::placeholder { color: var(--text-muted); }
+
+    .btn-primary {
+      display: block;
+      width: calc(100% - 32px);
+      margin: 12px 16px 0;
+      background: linear-gradient(135deg, var(--lavender-mid), var(--indigo));
+      color: white;
+      border: none;
+      border-radius: var(--radius-md);
+      padding: 14px;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: 0 4px 16px rgba(167,139,250,.35);
+      transition: var(--transition);
+      font-family: inherit;
+    }
+    .btn-primary:active { transform: scale(.98); }
+    .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+
+    .mood-history-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 14px;
+      background: var(--white);
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow-sm);
+      margin: 0 16px 8px;
+      animation: slideIn .2s ease;
+    }
+    .mood-hist-emoji { font-size: 24px; }
+    .mood-hist-info { flex: 1; }
+    .mood-hist-label { font-size: 14px; font-weight: 600; }
+    .mood-hist-date { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+    .mood-hist-note { font-size: 12px; color: var(--text-secondary); margin-top: 3px; font-style: italic; }
+
+    /* ─────────────────────────────────────────────── */
+    /*  SLEEP SCREEN                                    */
+    /* ─────────────────────────────────────────────── */
+    .sleep-form-card {
+      background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%);
+      margin: 16px 16px 0;
+      border-radius: var(--radius-lg);
+      padding: 22px 20px;
+      color: white;
+      box-shadow: 0 8px 32px rgba(49,46,129,.4);
+    }
+    .sleep-form-title { font-size: 16px; font-weight: 700; margin-bottom: 16px; opacity: .95; }
+    .sleep-time-row { display: flex; gap: 12px; }
+    .sleep-time-field { flex: 1; }
+    .sleep-time-label { font-size: 11px; opacity: .7; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 6px; }
+    .sleep-time-input {
+      width: 100%;
+      background: rgba(255,255,255,.12);
+      border: 1.5px solid rgba(255,255,255,.2);
+      border-radius: var(--radius-sm);
+      padding: 11px 12px;
+      font-size: 15px;
+      font-weight: 700;
+      color: white;
+      outline: none;
+      text-align: center;
+      font-family: inherit;
+      transition: var(--transition);
+    }
+    .sleep-time-input:focus { border-color: rgba(255,255,255,.5); background: rgba(255,255,255,.18); }
+    .sleep-time-input::placeholder { color: rgba(255,255,255,.4); font-weight: 400; }
+
+    #sleep-result {
+      margin: 12px 16px 0;
+      border-radius: var(--radius-md);
+      padding: 16px;
+      background: var(--white);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow-sm);
+      display: none;
+      animation: slideIn .25s ease;
+    }
+    #sleep-result.visible { display: block; }
+    .sleep-duration-big { font-size: 36px; font-weight: 800; color: var(--lavender-mid); }
+    .sleep-duration-label { font-size: 12px; color: var(--text-muted); font-weight: 500; }
+    .sleep-insight-text { font-size: 13px; color: var(--text-secondary); line-height: 1.5; margin-top: 10px; border-top: 1px solid var(--border); padding-top: 10px; }
+
+    .sleep-record-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 14px;
+      background: var(--white);
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow-sm);
+      margin: 0 16px 8px;
+      animation: slideIn .2s ease;
+    }
+    .sleep-rec-icon {
+      width: 40px; height: 40px;
+      background: linear-gradient(135deg, #1e1b4b, #312e81);
+      border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+    .sleep-rec-info { flex: 1; }
+    .sleep-rec-hours { font-size: 16px; font-weight: 700; color: var(--text-primary); }
+    .sleep-rec-times { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+    .sleep-rec-date { font-size: 11px; color: var(--text-muted); text-align: right; }
+
+    /* ─── Toast ────────────────────────────────────── */
+    #toast {
+      position: fixed;
+      bottom: calc(var(--nav-h) + 16px);
+      left: 50%; transform: translateX(-50%) translateY(10px);
+      background: var(--text-primary);
+      color: white;
+      padding: 10px 20px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 500;
+      opacity: 0;
+      transition: all .25s ease;
+      z-index: 100;
+      white-space: nowrap;
+      pointer-events: none;
+    }
+    #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    /* ─── Scrollbar ─────────────────────────────────── */
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--lavender); border-radius: 4px; }
+  </style>
+</head>
+<body>
+<div id="app">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-logo">🤝</div>
+    <div>
+      <div class="header-title">Bad Friend</div>
+      <div class="header-subtitle">Your honest companion</div>
+    </div>
+    <div class="header-actions">
+      <span class="header-badge" id="online-badge">● Online</span>
+    </div>
+  </div>
+
+  <!-- Screens -->
+  <div class="screens">
+
+    <!-- HOME -->
+    <div class="screen active" id="screen-home">
+      <div class="home-hero">
+        <div class="hero-greeting" id="hero-greeting">Good morning</div>
+        <div class="hero-name">How are you today?</div>
+        <div class="hero-sub">I'm here — tell me what's on your mind.</div>
+        <div class="hero-mood-row">
+          <div class="hero-mood-chip" onclick="quickMood('happy')">😊 Great</div>
+          <div class="hero-mood-chip" onclick="quickMood('neutral')">😐 Okay</div>
+          <div class="hero-mood-chip" onclick="quickMood('sad')">😞 Low</div>
+          <div class="hero-mood-chip" onclick="quickMood('stressed')">😤 Stressed</div>
+        </div>
+      </div>
+
+      <div class="stat-row">
+        <div class="stat-chip">
+          <div class="stat-num" id="home-task-count">0</div>
+          <div class="stat-label">Tasks Today</div>
+        </div>
+        <div class="stat-chip">
+          <div class="stat-num" id="home-done-count">0</div>
+          <div class="stat-label">Completed</div>
+        </div>
+        <div class="stat-chip">
+          <div class="stat-num" id="home-mood-today">—</div>
+          <div class="stat-label">Mood Today</div>
+        </div>
+      </div>
+
+      <div class="section-title">Quick Access</div>
+      <div class="quick-grid">
+        <div class="quick-card" onclick="navigate('chat')">
+          <div class="quick-icon" style="background:var(--lavender-light)">💬</div>
+          <div class="quick-card-title">Talk to Friend</div>
+          <div class="quick-card-sub">Chat, vent, get support</div>
+        </div>
+        <div class="quick-card" onclick="navigate('tasks')">
+          <div class="quick-icon" style="background:var(--blue-light)">✅</div>
+          <div class="quick-card-title">My Tasks</div>
+          <div class="quick-card-sub">Stay on top of things</div>
+        </div>
+        <div class="quick-card" onclick="navigate('mood')">
+          <div class="quick-icon" style="background:#fef9c3">🌡️</div>
+          <div class="quick-card-title">Mood Check</div>
+          <div class="quick-card-sub">Track how you feel</div>
+        </div>
+        <div class="quick-card" onclick="navigate('sleep')">
+          <div class="quick-icon" style="background:#e0e7ff">🌙</div>
+          <div class="quick-card-title">Sleep Log</div>
+          <div class="quick-card-sub">Track your rest</div>
+        </div>
+      </div>
+
+      <div class="section-title">Start a conversation</div>
+      <div class="card" style="cursor:pointer" onclick="startChat('I am feeling overwhelmed today')">
+        <div style="font-size:13px;color:var(--text-secondary);line-height:1.5">
+          <strong style="color:var(--text-primary)">Need to vent?</strong><br>
+          Tell me what's weighing on you. No judgment, I'm listening.
+        </div>
+      </div>
+      <div class="card" style="cursor:pointer" onclick="startChat('Help me focus and be productive today')">
+        <div style="font-size:13px;color:var(--text-secondary);line-height:1.5">
+          <strong style="color:var(--text-primary)">Struggling to focus?</strong><br>
+          Let's build a game plan for your day together.
+        </div>
+      </div>
+    </div>
+
+    <!-- TASKS -->
+    <div class="screen" id="screen-tasks">
+      <div class="task-input-row">
+        <input class="task-input" id="task-input" type="text" placeholder="Add a new task..." maxlength="120" />
+        <button class="btn-add" onclick="addTask()">+</button>
+      </div>
+      <div class="tasks-filter-row">
+        <div class="filter-chip active" onclick="setFilter('all', this)">All</div>
+        <div class="filter-chip" onclick="setFilter('active', this)">Active</div>
+        <div class="filter-chip" onclick="setFilter('done', this)">Done</div>
+      </div>
+      <div id="tasks-list"></div>
+    </div>
+
+    <!-- CHAT -->
+    <div class="screen" id="screen-chat">
+      <div class="chat-messages" id="chat-messages">
+        <div class="chat-welcome">
+          <div class="chat-welcome-icon">🤝</div>
+          <h3>Hey, I'm Bad Friend</h3>
+          <p>I'm here to listen, support you, and keep it real. What's on your mind?</p>
+          <div class="chat-starters">
+            <div class="starter-chip" onclick="sendStarter(this)">I need to vent</div>
+            <div class="starter-chip" onclick="sendStarter(this)">Help me focus</div>
+            <div class="starter-chip" onclick="sendStarter(this)">I can't sleep</div>
+            <div class="starter-chip" onclick="sendStarter(this)">Feeling stressed</div>
+            <div class="starter-chip" onclick="sendStarter(this)">I'm overwhelmed</div>
+            <div class="starter-chip" onclick="sendStarter(this)">Motivate me</div>
+          </div>
+        </div>
+      </div>
+      <div class="chat-input-area">
+        <div class="chat-input-wrap">
+          <textarea id="chat-input" placeholder="Say something..." rows="1" onkeydown="chatKeydown(event)" oninput="autoResize(this)"></textarea>
+        </div>
+        <button class="chat-btn" id="mic-btn" onclick="toggleMic()" title="Voice input">🎤</button>
+        <button class="chat-btn" id="send-btn" onclick="sendMessage()">➤</button>
+      </div>
+    </div>
+
+    <!-- MOOD -->
+    <div class="screen" id="screen-mood">
+      <div class="section-title">How are you feeling right now?</div>
+      <div class="mood-grid">
+        <div class="mood-option" data-mood="happy" onclick="selectMood('happy')">
+          <div class="mood-emoji">😊</div>
+          <div class="mood-label">Happy</div>
+        </div>
+        <div class="mood-option" data-mood="neutral" onclick="selectMood('neutral')">
+          <div class="mood-emoji">😐</div>
+          <div class="mood-label">Neutral</div>
+        </div>
+        <div class="mood-option" data-mood="sad" onclick="selectMood('sad')">
+          <div class="mood-emoji">😞</div>
+          <div class="mood-label">Sad</div>
+        </div>
+        <div class="mood-option" data-mood="stressed" onclick="selectMood('stressed')">
+          <div class="mood-emoji">😤</div>
+          <div class="mood-label">Stressed</div>
+        </div>
+      </div>
+      <div class="mood-note-wrap">
+        <textarea class="mood-note" id="mood-note" placeholder="Add a note about how you're feeling... (optional)"></textarea>
+      </div>
+      <button class="btn-primary" id="save-mood-btn" onclick="saveMood()" disabled>Save Today's Mood</button>
+      <div class="section-title">Recent History</div>
+      <div id="mood-history"></div>
+    </div>
+
+    <!-- SLEEP -->
+    <div class="screen" id="screen-sleep">
+      <div class="sleep-form-card">
+        <div class="sleep-form-title">🌙 Log Your Sleep</div>
+        <div class="sleep-time-row">
+          <div class="sleep-time-field">
+            <div class="sleep-time-label">Bedtime</div>
+            <input class="sleep-time-input" id="sleep-bedtime" type="time" placeholder="23:00" />
+          </div>
+          <div class="sleep-time-field">
+            <div class="sleep-time-label">Wake up</div>
+            <input class="sleep-time-input" id="sleep-wakeup" type="time" placeholder="07:00" />
+          </div>
+        </div>
+        <button class="btn-primary" onclick="saveSleep()" style="margin:14px 0 0;width:100%">Calculate & Save</button>
+      </div>
+
+      <div id="sleep-result">
+        <div class="sleep-duration-big" id="sleep-hours-display">—</div>
+        <div class="sleep-duration-label">hours of sleep</div>
+        <div class="sleep-insight-text" id="sleep-insight-text"></div>
+      </div>
+
+      <div class="section-title">Sleep History</div>
+      <div id="sleep-history"></div>
+    </div>
+
+  </div><!-- /screens -->
+
+  <!-- Bottom Nav -->
+  <nav class="bottom-nav">
+    <div class="nav-item active" onclick="navigate('home')" id="nav-home">
+      <div class="nav-icon">🏠</div>
+      <div class="nav-label">Home</div>
+    </div>
+    <div class="nav-item" onclick="navigate('tasks')" id="nav-tasks">
+      <div class="nav-icon">✅</div>
+      <div class="nav-label">Tasks</div>
+    </div>
+    <div class="nav-item" onclick="navigate('chat')" id="nav-chat">
+      <div class="nav-icon">💬</div>
+      <div class="nav-label">Chat</div>
+    </div>
+    <div class="nav-item" onclick="navigate('mood')" id="nav-mood">
+      <div class="nav-icon">🌡️</div>
+      <div class="nav-label">Mood</div>
+    </div>
+    <div class="nav-item" onclick="navigate('sleep')" id="nav-sleep">
+      <div class="nav-icon">🌙</div>
+      <div class="nav-label">Sleep</div>
+    </div>
+  </nav>
+
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<script>
+    const   API_BASE_URL = "https://refactored-fiesta-447ppr4g44qcj799-5000.app.github.dev/";
+  /* ─── State ──────────────────────────────────── */
+  const state = {
+    tasks: [],
+    moods: [],
+    sleep: [],
+    chatHistory: [],
+    selectedMood: null,
+    taskFilter: 'all',
+    isRecording: false,
+    recognition: null,
+  };
+
+  /* ─── Navigation ─────────────────────────────── */
+  function navigate(tab) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    document.getElementById('screen-' + tab).classList.add('active');
+    document.getElementById('nav-' + tab).classList.add('active');
+    if (tab === 'home') refreshHomeStats();
+    if (tab === 'tasks') renderTasks();
+    if (tab === 'mood') loadMoodHistory();
+    if (tab === 'sleep') loadSleepHistory();
+  }
+
+  /* ─── Greeting ───────────────────────────────── */
+  function setGreeting() {
+    const h = new Date().getHours();
+    const el = document.getElementById('hero-greeting');
+    if (h < 12) el.textContent = 'Good morning ☀️';
+    else if (h < 17) el.textContent = 'Good afternoon 👋';
+    else el.textContent = 'Good evening 🌙';
+  }
+
+  /* ─── Toast ──────────────────────────────────── */
+  function toast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2400);
+  }
+
+  /* ─── Home Stats ─────────────────────────────── */
+  function refreshHomeStats() {
+    const total = state.tasks.length;
+    const done = state.tasks.filter(t => t.completed).length;
+    document.getElementById('home-task-count').textContent = total;
+    document.getElementById('home-done-count').textContent = done;
+    const today = state.moods.filter(m => m.date === todayStr()).slice(-1)[0];
+    document.getElementById('home-mood-today').textContent =
+      today ? ({happy:'😊',neutral:'😐',sad:'😞',stressed:'😤'}[today.mood] || '—') : '—';
+  }
+
+  function todayStr() {
+    return new Date().toISOString().split('T')[0];
+  }
+
+  /* ─── Quick mood from home ───────────────────── */
+  function quickMood(m) {
+    navigate('mood');
+    setTimeout(() => selectMood(m), 100);
+  }
+
+  /* ─── TASKS ──────────────────────────────────── */
+  async function loadTasks() {
+    try {
+      const r = await fetch('/tasks');
+      const d = await r.json();
+      state.tasks = d.tasks || [];
+    } catch(_) {}
+  }
+
+  async function addTask() {
+    const inp = document.getElementById('task-input');
+    const title = inp.value.trim();
+    if (!title) return;
+    try {
+      const r = await fetch('/tasks', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({title})
+      });
+      const d = await r.json();
+      state.tasks.push(d.task);
+      inp.value = '';
+      renderTasks();
+      refreshHomeStats();
+      toast('Task added!');
+    } catch(_) { toast('Could not save task'); }
+  }
+
+  async function toggleTask(id) {
+    const task = state.tasks.find(t => t.id === id);
+    if (!task) return;
+    try {
+      const r = await fetch('/tasks/' + id, {
+        method: 'PATCH',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({completed: !task.completed})
+      });
+      const d = await r.json();
+      task.completed = d.task.completed;
+      renderTasks();
+      refreshHomeStats();
+    } catch(_) {}
+  }
+
+  async function deleteTask(id) {
+    try {
+      await fetch('/tasks/' + id, {method: 'DELETE'});
+      state.tasks = state.tasks.filter(t => t.id !== id);
+      renderTasks();
+      refreshHomeStats();
+      toast('Task deleted');
+    } catch(_) {}
+  }
+
+  function setFilter(f, el) {
+    state.taskFilter = f;
+    document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+    el.classList.add('active');
+    renderTasks();
+  }
+
+  function renderTasks() {
+    const list = document.getElementById('tasks-list');
+    let filtered = state.tasks;
+    if (state.taskFilter === 'active') filtered = state.tasks.filter(t => !t.completed);
+    if (state.taskFilter === 'done') filtered = state.tasks.filter(t => t.completed);
+
+    if (!filtered.length) {
+      list.innerHTML = `<div class="empty-state"><div class="empty-icon">${state.taskFilter==='done'?'🎉':'📋'}</div><p>${state.taskFilter==='done'?'No completed tasks yet. Keep going!':'No tasks yet. Add something to get started.'}</p></div>`;
+      return;
+    }
+    list.innerHTML = filtered.map(t => `
+      <div class="task-item ${t.completed?'completed':''}">
+        <div class="task-check ${t.completed?'checked':''}" onclick="toggleTask(${t.id})"></div>
+        <div class="task-text">${escHtml(t.title)}</div>
+        <button class="task-del" onclick="deleteTask(${t.id})">🗑️</button>
+      </div>
+    `).join('');
+  }
+
+  document.getElementById('task-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') addTask();
+  });
+
+  /* ─── CHAT ───────────────────────────────────── */
+  function timeStr() {
+    return new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+  }
+
+  function appendMsg(role, text) {
+    const container = document.getElementById('chat-messages');
+    const welcome = container.querySelector('.chat-welcome');
+    if (welcome) welcome.remove();
+
+    const div = document.createElement('div');
+    div.className = 'msg ' + role;
+    div.innerHTML = `<div class="msg-bubble">${escHtml(text)}</div><div class="msg-time">${timeStr()}</div>`;
+    container.appendChild(div);
+    container.scrollTop = container.scrollHeight;
+    return div;
+  }
+
+  function showTyping() {
+    const container = document.getElementById('chat-messages');
+    const div = document.createElement('div');
+    div.className = 'msg ai';
+    div.id = 'typing-indicator';
+    div.innerHTML = `<div class="typing-indicator"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>`;
+    container.appendChild(div);
+    container.scrollTop = container.scrollHeight;
+  }
+
+  function hideTyping() {
+    const t = document.getElementById('typing-indicator');
+    if (t) t.remove();
+  }
+
+  async function sendMessage() {
+    const inp = document.getElementById('chat-input');
+    const text = inp.value.trim();
+    if (!text) return;
+
+    inp.value = '';
+    inp.style.height = '';
+    document.getElementById('send-btn').disabled = true;
+
+    appendMsg('user', text);
+    state.chatHistory.push({role: 'user', content: text});
+
+    showTyping();
+    try {
+      const response = await fetch($`{API_BASE_URL}/chat`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({message: text, history: state.chatHistory.slice(-12)})
+      });
+      const d = await r.json();
+      hideTyping();
+      const reply = d.reply || "I'm here, keep talking.";
+      appendMsg('ai', reply);
+      state.chatHistory.push({role: 'assistant', content: reply});
+    } catch(_) {
+      hideTyping();
+      appendMsg('ai', "Something went wrong on my end — but I'm still here. Try again?");
+    }
+    document.getElementById('send-btn').disabled = false;
+  }
+
+  function sendStarter(el) {
+    const text = el.textContent;
+    document.getElementById('chat-input').value = text;
+    sendMessage();
+  }
+
+  function startChat(text) {
+    navigate('chat');
+    setTimeout(() => {
+      document.getElementById('chat-input').value = text;
+      sendMessage();
+    }, 150);
+  }
+
+  function chatKeydown(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  }
+
+  function autoResize(el) {
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 96) + 'px';
+  }
+
+  /* ─── Voice input ────────────────────────────── */
+  function toggleMic() {
+    const btn = document.getElementById('mic-btn');
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+      toast('Voice input not supported in this browser');
+      return;
+    }
+    if (state.isRecording) {
+      state.recognition && state.recognition.stop();
+      state.isRecording = false;
+      btn.classList.remove('recording');
+      btn.textContent = '🎤';
+      return;
+    }
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const rec = new SR();
+    rec.lang = 'en-US';
+    rec.interimResults = false;
+    rec.maxAlternatives = 1;
+    rec.onresult = e => {
+      const t = e.results[0][0].transcript;
+      document.getElementById('chat-input').value = t;
+      state.isRecording = false;
+      btn.classList.remove('recording');
+      btn.textContent = '🎤';
+    };
+    rec.onerror = () => {
+      toast('Could not capture voice');
+      state.isRecording = false;
+      btn.classList.remove('recording');
+      btn.textContent = '🎤';
+    };
+    rec.onend = () => {
+      state.isRecording = false;
+      btn.classList.remove('recording');
+      btn.textContent = '🎤';
+    };
+    state.recognition = rec;
+    rec.start();
+    state.isRecording = true;
+    btn.classList.add('recording');
+    btn.textContent = '⏹️';
+    toast('Listening...');
+  }
+
+  /* ─── MOOD ───────────────────────────────────── */
+  function selectMood(m) {
+    state.selectedMood = m;
+    document.querySelectorAll('.mood-option').forEach(el => el.classList.remove('selected'));
+    document.querySelector(`.mood-option[data-mood="${m}"]`).classList.add('selected');
+    document.getElementById('save-mood-btn').disabled = false;
+  }
+
+  async function saveMood() {
+    if (!state.selectedMood) return;
+    const note = document.getElementById('mood-note').value.trim();
+    try {
+      const r = await fetch('/mood', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({mood: state.selectedMood, note})
+      });
+      const d = await r.json();
+      state.moods.push(d.entry);
+      document.getElementById('mood-note').value = '';
+      document.querySelectorAll('.mood-option').forEach(el => el.classList.remove('selected'));
+      state.selectedMood = null;
+      document.getElementById('save-mood-btn').disabled = true;
+      toast('Mood saved!');
+      loadMoodHistory();
+      refreshHomeStats();
+    } catch(_) { toast('Could not save mood'); }
+  }
+
+  async function loadMoodHistory() {
+    try {
+      const r = await fetch('/mood');
+      const d = await r.json();
+      state.moods = d.moods || [];
+      renderMoodHistory();
+    } catch(_) {}
+  }
+
+  function renderMoodHistory() {
+    const el = document.getElementById('mood-history');
+    const moods = [...state.moods].reverse();
+    const emojis = {happy:'😊',neutral:'😐',sad:'😞',stressed:'😤'};
+    const labels = {happy:'Happy',neutral:'Neutral',sad:'Sad',stressed:'Stressed'};
+    if (!moods.length) {
+      el.innerHTML = '<div class="empty-state"><div class="empty-icon">🌡️</div><p>No mood entries yet. Log how you\'re feeling!</p></div>';
+      return;
+    }
+    el.innerHTML = moods.map(m => `
+      <div class="mood-history-item">
+        <div class="mood-hist-emoji">${emojis[m.mood]||'❓'}</div>
+        <div class="mood-hist-info">
+          <div class="mood-hist-label">${labels[m.mood]||m.mood}</div>
+          <div class="mood-hist-date">${m.date} at ${m.time}</div>
+          ${m.note ? `<div class="mood-hist-note">"${escHtml(m.note)}"</div>` : ''}
+        </div>
+      </div>
+    `).join('');
+  }
+
+  /* ─── SLEEP ──────────────────────────────────── */
+  async function saveSleep() {
+    const bedtime = document.getElementById('sleep-bedtime').value;
+    const wakeup = document.getElementById('sleep-wakeup').value;
+    if (!bedtime || !wakeup) { toast('Enter both times'); return; }
+    try {
+      const r = await fetch('/sleep', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({bedtime, wakeup})
+      });
+      const d = await r.json();
+      const rec = d.record;
+      state.sleep.unshift(rec);
+
+      document.getElementById('sleep-hours-display').textContent = rec.duration_hours;
+      document.getElementById('sleep-insight-text').textContent = rec.insight;
+      document.getElementById('sleep-result').classList.add('visible');
+
+      toast('Sleep logged!');
+      loadSleepHistory();
+    } catch(_) { toast('Could not save sleep data'); }
+  }
+
+  async function loadSleepHistory() {
+    try {
+      const r = await fetch('/sleep');
+      const d = await r.json();
+      state.sleep = d.records || [];
+      renderSleepHistory();
+    } catch(_) {}
+  }
+
+  function renderSleepHistory() {
+    const el = document.getElementById('sleep-history');
+    const records = [...state.sleep].reverse();
+    if (!records.length) {
+      el.innerHTML = '<div class="empty-state"><div class="empty-icon">🌙</div><p>No sleep records yet. Log your first night!</p></div>';
+      return;
+    }
+    el.innerHTML = records.map(r => `
+      <div class="sleep-record-item">
+        <div class="sleep-rec-icon">🌙</div>
+        <div class="sleep-rec-info">
+          <div class="sleep-rec-hours">${r.duration_hours} hours</div>
+          <div class="sleep-rec-times">${r.bedtime} → ${r.wakeup}</div>
+        </div>
+        <div class="sleep-rec-date">${r.date}</div>
+      </div>
+    `).join('');
+  }
+
+  /* ─── Helpers ────────────────────────────────── */
+  function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  /* ─── Init ───────────────────────────────────── */
+  async function init() {
+    setGreeting();
+    await loadTasks();
+    await loadMoodHistory();
+    await loadSleepHistory();
+    refreshHomeStats();
+  }
+
+  init();
+</script>
+</body>
+</html>
