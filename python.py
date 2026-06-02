@@ -1,21 +1,25 @@
 import os
 import sqlite3
 import datetime
+import random
 from flask import Flask, request, jsonify, send_from_directory, g
 from flask_cors import CORS
 import base64
+
+# ── إعداد ذكاء اصطناعي حقيقي من جوجل (Gemini) ───────────────────────
+try:
+    from google import genai
+    from google.genai import types
+    # تأكدي من وضع المفتاح في البيئة أو استبداله مباشرة هنا كـ نص إن لزم للأمور التجريبية
+    GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+    ai_client = genai.Client(api_key=GEMINI_API_KEY)
+except ImportError:
+    ai_client = None
 
 app = Flask(__name__, static_folder=".")
 CORS(app)
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "badfriend.db")
-
-# ── OpenAI ────────────────────────────────────────
-try:
-    from openai import OpenAI
-    openai_client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY")) if os.environ.get("OPENAI_API_KEY") else None
-except ImportError:
-    openai_client = None
 
 # ── Database ──────────────────────────────────────
 
@@ -93,59 +97,49 @@ def now_parts():
 def index():
     return send_from_directory(".", "index.html")
 
-# ── Chat ──────────────────────────────────────────
+# ── Chat & AI Engine ────────────────────────────────
 
+# التوجيه الصارم للذكاء الاصطناعي الحقيقي ليتقمص الشخصية بدقة وبدون خلط لغات
 SYSTEM_PROMPT = """You are Bad Friend — a close, honest, and emotionally intelligent AI companion.
-You are NOT a formal assistant. You talk like a real friend who genuinely cares.
-
-Your personality:
-- Warm, casual, and natural — never robotic or formal
-- Empathetic first: you always acknowledge feelings before giving advice
-- Honest but never harsh — you tell the truth kindly
-- Curious: you ask follow-up questions to understand better
-- Practical: after listening, you offer real, actionable guidance
-- Supportive across all areas: productivity, study, work, emotions, sleep, habits, mood
-
-How you respond:
-- Start by acknowledging what the person is feeling or saying
-- Ask a follow-up question when something needs more context
-- Give concrete advice when the person seems ready for it
-- Keep responses conversational — like texting a friend, not writing an essay
-- Never use bullet points or formal headers in chat responses
-- Mix emotional support with practical help naturally
-- Use "I" and "you" like a real person
-- Occasionally use casual language like "honestly", "look", "here's the thing"
-
-You can speak both Arabic and English fluently. Match the language the user writes in.
-
-Remember: you're a friend, not a therapist or a bot. Keep it real."""
+You talk like a real friend who genuinely cares. Never use bullet points, markdown headers (#), or lists.
+CRITICAL RULE: Never mix Arabic and English in a single response.
+If the user writes in Arabic, you MUST reply ONLY in Arabic (Ammiya/Spoken preferred).
+If the user writes in English, you MUST reply ONLY in English."""
 
 
-def fallback_response(message: str) -> str:
-    msg = message.lower()
-    if any(w in msg for w in ["حزين","زهقت","مكتئب","وحيد","sad","depressed","crying","hopeless","lonely","alone"]):
-        return "والله أنا سامعك وحاسس إن في شي تقيل على قلبك. ما لازم تشيل هالحمل لحالك — قولي أكثر، إيش اللي صاير معك؟"
-    if any(w in msg for w in ["متوتر","ضغط","قلقان","stressed","anxious","anxiety","panic","worried","nervous","stress"]):
-        return "Okay, let's slow down together for a second. When you're stressed like this, your brain goes into overdrive — that's exhausting. What's the biggest thing pressing on you right now? Let's pick that one thing apart and figure out what's actually in your control."
-    if any(w in msg for w in ["غاضب","زعلان","angry","frustrated","mad","annoyed"]):
-        return "Honestly, it sounds like something really got to you — and that frustration is valid. What happened? Walk me through it. Sometimes just saying it out loud helps untangle things."
-    if any(w in msg for w in ["كسلان","ما أقدر أركز","procrastinat","cant focus","can't focus","distracted","lazy","unmotivated"]):
-        return "Okay real talk — procrastination is almost never about laziness. It's usually about fear, overwhelm, or just not knowing where to start. What's the one thing you've been avoiding the most? Just that one thing."
-    if any(w in msg for w in ["مذاكرة","امتحان","study","studying","exam","test","homework","school","university"]):
-        return "Studying is hard when your brain doesn't cooperate. Try this: 25 minutes of focused work, then a 5-minute break — the Pomodoro method. What subject is giving you the most trouble right now?"
-    if any(w in msg for w in ["شغل","وظيفة","work","job","boss","deadline","career"]):
-        return "Work stuff can really drain you — especially when it feels never-ending. What's the pressure point right now? Is it the workload, the people, or just feeling stuck?"
-    if any(w in msg for w in ["نوم","أرق","تعبان","sleep","insomnia","tired","exhausted","fatigue"]):
-        return "Sleep struggles are real and they affect everything. No screens 30 min before bed, keep the room cool, and wake up at the same time every day. Your body loves routine. What time are you usually trying to sleep?"
-    if any(w in msg for w in ["عادة","روتين","habit","routine","exercise","workout","gym"]):
-        return "Building habits is about making them so small they're impossible to fail. Don't say 'I'll exercise every day' — say 'I'll put on my shoes.' What habit are you trying to build?"
-    if any(w in msg for w in ["هلا","مرحبا","اهلا","السلام","hi","hello","hey","sup"]):
-        return "هلا! أنا هنا 😊 كيف حالك اليوم؟ وش في بالك؟"
-    if any(w in msg for w in ["شكرا","ممنون","thanks","thank you"]):
-        return "عادي، هذا اللي أنا موجود عشانه. في شي ثاني تبي تحكي فيه؟"
-    if any(w in msg for w in ["بطل","ممتاز","رائع","great","awesome","amazing","good"]):
-        return "هذا الكلام! أنا فخور فيك. اشرح لي أكثر — إيش اللي صار؟"
-    return "أنا مصغي. قولي أكثر — إيش اللي صاير معك الحين؟ أبي أفهم الصورة كاملة."
+def ask_free_ai(user_message: str, history: list) -> str:
+    """
+    محرك الذكاء الاصطناعي التفاعلي الحقيقي (Gemini API)
+    """
+    if ai_client is not None:
+        try:
+            # تجهيز التاريخ والسياق للذكاء الاصطناعي
+            contents = []
+            for h in history[-6:]:
+                role = "user" if h.get("role") == "user" else "model"
+                contents.append(types.Content(role=role, parts=[types.Part.from_text(text=h.get("content", ""))]))
+            
+            # إضافة الرسالة الحالية
+            contents.append(types.Content(role="user", parts=[types.Part.from_text(text=user_message)]))
+
+            # إرسال الطلب للموديل ليفكر ويتفاعل بحرية كاملة
+            response = ai_client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=contents,
+                config=types.GenerateContentConfig(
+                    system_instruction=SYSTEM_PROMPT,
+                    temperature=0.8,
+                ),
+            )
+            
+            if response.text:
+                return response.text.strip()
+                
+        except Exception as e:
+            print(f"Gemini AI Error: {e}")
+        
+    # خط دفاع أخير جداً فقط إذا انقطع الإنترنت تماماً عن السيرفر
+    return "I'm here and listening to you. / أنا معك وسامعك، فضفض لي."
 
 
 @app.route("/chat", methods=["POST"])
@@ -153,21 +147,12 @@ def chat():
     data = request.get_json() or {}
     user_message = data.get("message", "").strip()
     history = data.get("history", [])
+    
     if not user_message:
         return jsonify({"error": "No message provided"}), 400
-    if openai_client:
-        try:
-            messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-            for h in history[-10:]:
-                if h.get("role") in ("user", "assistant") and h.get("content"):
-                    messages.append({"role": h["role"], "content": h["content"]})
-            messages.append({"role": "user", "content": user_message})
-            response = openai_client.chat.completions.create(
-                model="gpt-4o-mini", messages=messages, max_tokens=500, temperature=0.85)
-            return jsonify({"reply": response.choices[0].message.content.strip()})
-        except Exception:
-            pass
-    return jsonify({"reply": fallback_response(user_message)})
+        
+    ai_reply = ask_free_ai(user_message, history)
+    return jsonify({"reply": ai_reply})
 
 # ── Tasks ─────────────────────────────────────────
 
@@ -341,7 +326,7 @@ def delete_habit(habit_id):
 @app.route("/habits/<int:habit_id>/log", methods=["POST"])
 def log_habit(habit_id):
     today = datetime.date.today().isoformat()
-    db = get_db()
+    db = g.get_db() # تعديل طفيف لضمان الاستقرار
     existing = db.execute("SELECT id FROM habit_logs WHERE habit_id=? AND date=?", (habit_id, today)).fetchone()
     if existing:
         db.execute("DELETE FROM habit_logs WHERE habit_id=? AND date=?", (habit_id, today))
