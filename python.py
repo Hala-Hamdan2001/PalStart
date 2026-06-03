@@ -5,6 +5,8 @@ import random
 from flask import Flask, request, jsonify, send_from_directory, g
 from flask_cors import CORS
 import base64
+from dotenv import load_dotenv
+load_dotenv()
 
 # ── إعداد ذكاء اصطناعي حقيقي من جوجل (Gemini) ───────────────────────
 try:

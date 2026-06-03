@@ -948,7 +948,20 @@
 <div id="toast"></div>
 
 <script>
-    const   API_BASE_URL = "https://refactored-fiesta-447ppr4g44qcj799-5000.app.github.dev/";
+  // الرابط الخاص بسيرفر الـ Flask بالخلفية
+  //const API_BASE_URL = window.location.origin.replace('-3000.', '-5000.') + '/';
+ // 1. الرابط الافتراضي للـ Backend المرفوع (مثلاً على Render أو Heroku)
+let API_BASE_URL = "hhttps://super-space-guide-x6wgg4697x6f677g-5000.app.github.dev/"; 
+
+// 2. إذا كنتِ تعملين داخل بيئة تطوير (Codespaces أو Localhost)
+if (window.location.hostname.includes('github.dev') || window.location.hostname === 'localhost') {
+    // إذا كنتِ على الـ Codespaces، حولي البورت من 3000 لـ 5000
+    API_BASE_URL = window.location.origin.replace('-3000.', '-5000.') + '/';
+}
+
+// الآن استخدمي API_BASE_URL في الـ fetch عادي
+console.log("Current API URL:", API_BASE_URL);
+
   /* ─── State ──────────────────────────────────── */
   const state = {
     tasks: [],
@@ -985,9 +998,11 @@
   /* ─── Toast ──────────────────────────────────── */
   function toast(msg) {
     const t = document.getElementById('toast');
-    t.textContent = msg;
-    t.classList.add('show');
-    setTimeout(() => t.classList.remove('show'), 2400);
+    if (t) {
+      t.textContent = msg;
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 2400);
+    }
   }
 
   /* ─── Home Stats ─────────────────────────────── */
@@ -1014,7 +1029,7 @@
   /* ─── TASKS ──────────────────────────────────── */
   async function loadTasks() {
     try {
-      const r = await fetch('/tasks');
+      const r = await fetch(`${API_BASE_URL}tasks`);
       const d = await r.json();
       state.tasks = d.tasks || [];
     } catch(_) {}
@@ -1025,7 +1040,7 @@
     const title = inp.value.trim();
     if (!title) return;
     try {
-      const r = await fetch('/tasks', {
+      const r = await fetch(`${API_BASE_URL}tasks`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({title})
@@ -1043,7 +1058,7 @@
     const task = state.tasks.find(t => t.id === id);
     if (!task) return;
     try {
-      const r = await fetch('/tasks/' + id, {
+      const r = await fetch(`${API_BASE_URL}tasks/${id}`, {
         method: 'PATCH',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({completed: !task.completed})
@@ -1057,7 +1072,7 @@
 
   async function deleteTask(id) {
     try {
-      await fetch('/tasks/' + id, {method: 'DELETE'});
+      await fetch(`${API_BASE_URL}tasks/${id}`, {method: 'DELETE'});
       state.tasks = state.tasks.filter(t => t.id !== id);
       renderTasks();
       refreshHomeStats();
@@ -1074,6 +1089,7 @@
 
   function renderTasks() {
     const list = document.getElementById('tasks-list');
+    if (!list) return;
     let filtered = state.tasks;
     if (state.taskFilter === 'active') filtered = state.tasks.filter(t => !t.completed);
     if (state.taskFilter === 'done') filtered = state.tasks.filter(t => t.completed);
@@ -1091,9 +1107,13 @@
     `).join('');
   }
 
-  document.getElementById('task-input').addEventListener('keydown', e => {
-    if (e.key === 'Enter') addTask();
-  });
+  // تفعيل الاستماع لزر الـ Enter عند إضافة تيسك
+  const taskInp = document.getElementById('task-input');
+  if (taskInp) {
+    taskInp.addEventListener('keydown', e => {
+      if (e.key === 'Enter') addTask();
+    });
+  }
 
   /* ─── CHAT ───────────────────────────────────── */
   function timeStr() {
@@ -1102,6 +1122,7 @@
 
   function appendMsg(role, text) {
     const container = document.getElementById('chat-messages');
+    if (!container) return;
     const welcome = container.querySelector('.chat-welcome');
     if (welcome) welcome.remove();
 
@@ -1113,8 +1134,11 @@
     return div;
   }
 
+  __sendBtn = document.getElementById('send-btn') || document.getElementById('btn-send');
+
   function showTyping() {
     const container = document.getElementById('chat-messages');
+    if (!container) return;
     const div = document.createElement('div');
     div.className = 'msg ai';
     div.id = 'typing-indicator';
@@ -1130,24 +1154,26 @@
 
   async function sendMessage() {
     const inp = document.getElementById('chat-input');
+    const sendBtn = document.getElementById('send-btn') || document.getElementById('btn-send');
+    if (!inp) return;
     const text = inp.value.trim();
     if (!text) return;
 
     inp.value = '';
     inp.style.height = '';
-    document.getElementById('send-btn').disabled = true;
+    if (sendBtn) sendBtn.disabled = true;
 
     appendMsg('user', text);
     state.chatHistory.push({role: 'user', content: text});
 
     showTyping();
     try {
-      const response = await fetch($`{API_BASE_URL}/chat`, {
+      const response = await fetch(`${API_BASE_URL}chat`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({message: text, history: state.chatHistory.slice(-12)})
       });
-      const d = await r.json();
+      const d = await response.json();
       hideTyping();
       const reply = d.reply || "I'm here, keep talking.";
       appendMsg('ai', reply);
@@ -1156,20 +1182,26 @@
       hideTyping();
       appendMsg('ai', "Something went wrong on my end — but I'm still here. Try again?");
     }
-    document.getElementById('send-btn').disabled = false;
+    if (sendBtn) sendBtn.disabled = false;
   }
 
   function sendStarter(el) {
     const text = el.textContent;
-    document.getElementById('chat-input').value = text;
-    sendMessage();
+    const inp = document.getElementById('chat-input');
+    if (inp) {
+      inp.value = text;
+      sendMessage();
+    }
   }
 
   function startChat(text) {
     navigate('chat');
     setTimeout(() => {
-      document.getElementById('chat-input').value = text;
-      sendMessage();
+      const inp = document.getElementById('chat-input');
+      if (inp) {
+        inp.value = text;
+        sendMessage();
+      }
     }, 150);
   }
 
@@ -1195,8 +1227,10 @@
     if (state.isRecording) {
       state.recognition && state.recognition.stop();
       state.isRecording = false;
-      btn.classList.remove('recording');
-      btn.textContent = '🎤';
+      if (btn) {
+        btn.classList.remove('recording');
+        btn.textContent = '🎤';
+      }
       return;
     }
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -1208,25 +1242,33 @@
       const t = e.results[0][0].transcript;
       document.getElementById('chat-input').value = t;
       state.isRecording = false;
-      btn.classList.remove('recording');
-      btn.textContent = '🎤';
+      if (btn) {
+        btn.classList.remove('recording');
+        btn.textContent = '🎤';
+      }
     };
     rec.onerror = () => {
       toast('Could not capture voice');
       state.isRecording = false;
-      btn.classList.remove('recording');
-      btn.textContent = '🎤';
+      if (btn) {
+        btn.classList.remove('recording');
+        btn.textContent = '🎤';
+      }
     };
     rec.onend = () => {
       state.isRecording = false;
-      btn.classList.remove('recording');
-      btn.textContent = '🎤';
+      if (btn) {
+        btn.classList.remove('recording');
+        btn.textContent = '🎤';
+      }
     };
     state.recognition = rec;
     rec.start();
     state.isRecording = true;
-    btn.classList.add('recording');
-    btn.textContent = '⏹️';
+    if (btn) {
+      btn.classList.add('recording');
+      btn.textContent = '⏹️';
+    }
     toast('Listening...');
   }
 
@@ -1234,15 +1276,17 @@
   function selectMood(m) {
     state.selectedMood = m;
     document.querySelectorAll('.mood-option').forEach(el => el.classList.remove('selected'));
-    document.querySelector(`.mood-option[data-mood="${m}"]`).classList.add('selected');
-    document.getElementById('save-mood-btn').disabled = false;
+    const target = document.querySelector(`.mood-option[data-mood="${m}"]`);
+    if (target) target.classList.add('selected');
+    const saveBtn = document.getElementById('save-mood-btn');
+    if (saveBtn) saveBtn.disabled = false;
   }
 
   async function saveMood() {
     if (!state.selectedMood) return;
     const note = document.getElementById('mood-note').value.trim();
     try {
-      const r = await fetch('/mood', {
+      const r = await fetch(`${API_BASE_URL}mood`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({mood: state.selectedMood, note})
@@ -1252,7 +1296,8 @@
       document.getElementById('mood-note').value = '';
       document.querySelectorAll('.mood-option').forEach(el => el.classList.remove('selected'));
       state.selectedMood = null;
-      document.getElementById('save-mood-btn').disabled = true;
+      const saveBtn = document.getElementById('save-mood-btn');
+      if (saveBtn) saveBtn.disabled = true;
       toast('Mood saved!');
       loadMoodHistory();
       refreshHomeStats();
@@ -1261,7 +1306,7 @@
 
   async function loadMoodHistory() {
     try {
-      const r = await fetch('/mood');
+      const r = await fetch(`${API_BASE_URL}mood`);
       const d = await r.json();
       state.moods = d.moods || [];
       renderMoodHistory();
@@ -1270,6 +1315,7 @@
 
   function renderMoodHistory() {
     const el = document.getElementById('mood-history');
+    if (!el) return;
     const moods = [...state.moods].reverse();
     const emojis = {happy:'😊',neutral:'😐',sad:'😞',stressed:'😤'};
     const labels = {happy:'Happy',neutral:'Neutral',sad:'Sad',stressed:'Stressed'};
@@ -1295,7 +1341,7 @@
     const wakeup = document.getElementById('sleep-wakeup').value;
     if (!bedtime || !wakeup) { toast('Enter both times'); return; }
     try {
-      const r = await fetch('/sleep', {
+      const r = await fetch(`${API_BASE_URL}sleep`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({bedtime, wakeup})
@@ -1315,7 +1361,7 @@
 
   async function loadSleepHistory() {
     try {
-      const r = await fetch('/sleep');
+      const r = await fetch(`${API_BASE_URL}sleep`);
       const d = await r.json();
       state.sleep = d.records || [];
       renderSleepHistory();
@@ -1324,6 +1370,7 @@
 
   function renderSleepHistory() {
     const el = document.getElementById('sleep-history');
+    if (!el) return;
     const records = [...state.sleep].reverse();
     if (!records.length) {
       el.innerHTML = '<div class="empty-state"><div class="empty-icon">🌙</div><p>No sleep records yet. Log your first night!</p></div>';
