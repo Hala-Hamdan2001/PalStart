@@ -19,7 +19,7 @@ except ImportError:
     ai_client = None
 app = Flask(__name__, static_folder=".")
 CORS(app)
-DB_PATH = os.path.join(os.path.dirname(__file__), "badfriend.db")
+DB_PATH = os.path.join(os.path.dirname(__file__), "pilo.db")
 # ── Database ──────────────────────────────────────
 def get_db():
     if "db" not in g:
@@ -225,7 +225,7 @@ BEHAVIORAL GUIDELINES:
 def index():
     return send_from_directory(".", "index.html")
 # ── System Prompt ──────────────────────────────────
-BASE_SYSTEM_PROMPT = """You are Bad Friend — a close, honest, and emotionally intelligent AI companion with deep expertise in psychology and mental health.
+BASE_SYSTEM_PROMPT = """You are Pilo — a close, honest, and emotionally intelligent AI companion with deep expertise in psychology and mental health.
 Your responses must be SHORT, CONCISE, and highly USEFUL. Get straight to the point without filler words.
 You talk like a real friend who genuinely cares. Never use bullet points, markdown headers (#), or lists.
 Always pay close attention to the user's past messages in the history to maintain a logical, connected, and coherent conversation flow. You MUST remember what was discussed previously.
