@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Pilo</title>
+  <title>Pilo — Behavioral Intelligence Companion</title>
   <style>
     /* ═══════════════════════════════════════════════
        RESET & DESIGN TOKENS
@@ -318,6 +318,47 @@
     /* ═══════════════════════════════════════════════
        HOME SCREEN
     ═══════════════════════════════════════════════ */
+    .home-insight-card {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-sm);
+      margin: 16px 16px 0;
+      padding: 15px 16px;
+      animation: slideIn .25s ease;
+    }
+    .home-insight-icon {
+      width: 38px; height: 38px;
+      border-radius: 12px;
+      background: var(--amber-light);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 19px;
+      flex-shrink: 0;
+    }
+    .home-insight-content { flex: 1; min-width: 0; }
+    .home-insight-label {
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--mint-dark);
+      text-transform: uppercase;
+      letter-spacing: .6px;
+    }
+    .home-insight-text {
+      font-size: 13px;
+      line-height: 1.5;
+      color: var(--text-primary);
+      margin-top: 4px;
+    }
+    .home-insight-meta {
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-top: 5px;
+    }
     .home-hero {
       background: linear-gradient(145deg, #059669 0%, #0d9488 50%, #2dd4bf 100%);
       margin: 16px 16px 0;
@@ -1132,7 +1173,7 @@
       <div class="header-logo">🤝</div>
       <div>
         <div class="header-title">Pilo</div>
-        <div class="header-subtitle" data-i18n="app_subtitle">Your digital pillow for a calmer mind</div>
+        <div class="header-subtitle" data-i18n="app_subtitle">Your behavioral intelligence companion</div>
       </div>
       <div class="header-actions">
         <span class="header-badge" id="online-badge">● Online</span>
@@ -1144,10 +1185,18 @@
 
       <!-- HOME -->
       <div class="screen active" id="screen-home">
+        <div class="home-insight-card" id="home-insight-card">
+          <div class="home-insight-icon">✦</div>
+          <div class="home-insight-content">
+            <div class="home-insight-label" data-i18n="insight_card_title">AI Behavioral Insight</div>
+            <div class="home-insight-text" id="home-insight-text" data-i18n="insight_loading">Analyzing your recent signals...</div>
+            <div class="home-insight-meta" id="home-insight-meta"></div>
+          </div>
+        </div>
         <div class="home-hero">
           <div class="hero-greeting" id="hero-greeting">Good morning ☀️</div>
-          <div class="hero-name" data-i18n="hero_title">How are you today?</div>
-          <div class="hero-sub" data-i18n="hero_sub">I'm here — tell me what's on your mind.</div>
+          <div class="hero-name" data-i18n="hero_title">See your day more clearly</div>
+          <div class="hero-sub" data-i18n="hero_sub">Track the signals behind your habits, focus, and recovery.</div>
           <div id="hero-today-mood-wrap"></div>
           <div class="hero-mood-row">
             <div class="hero-mood-chip" onclick="quickMood('happy')">😊 <span data-i18n="mood_happy">Great</span></div>
@@ -1160,7 +1209,7 @@
         <div class="stat-row">
           <div class="stat-chip">
             <div class="stat-num" id="home-task-count">0</div>
-            <div class="stat-label" data-i18n="stat_tasks">Total Tasks</div>
+             <div class="stat-label" data-i18n="stat_tasks">Tracked Tasks</div>
           </div>
           <div class="stat-chip">
             <div class="stat-num" id="home-active-count">0</div>
@@ -1172,7 +1221,7 @@
           </div>
           <div class="stat-chip">
             <div class="stat-num" id="home-sleep-stat">—</div>
-            <div class="stat-label" data-i18n="stat_sleep">Last Sleep</div>
+             <div class="stat-label" data-i18n="stat_sleep">Last Recovery</div>
           </div>
         </div>
 
@@ -1180,37 +1229,37 @@
         <div class="quick-grid">
           <div class="quick-card" onclick="navigate('chat')">
             <div class="quick-icon" style="background:var(--mint-light)">💬</div>
-            <div class="quick-card-title" data-i18n="qcard_chat">Talk to Pilo</div>
-            <div class="quick-card-sub" data-i18n="qcard_chat_sub">Chat, vent, get support</div>
+             <div class="quick-card-title" data-i18n="qcard_chat">Ask Pilo</div>
+             <div class="quick-card-sub" data-i18n="qcard_chat_sub">Explore patterns and next steps</div>
           </div>
           <div class="quick-card" onclick="navigate('tasks')">
             <div class="quick-icon" style="background:var(--teal-light)">✅</div>
-            <div class="quick-card-title" data-i18n="qcard_tasks">My Tasks</div>
-            <div class="quick-card-sub" data-i18n="qcard_tasks_sub">Stay on top of things</div>
+             <div class="quick-card-title" data-i18n="qcard_tasks">Focus Plan</div>
+             <div class="quick-card-sub" data-i18n="qcard_tasks_sub">Turn intentions into momentum</div>
           </div>
           <div class="quick-card" onclick="navigate('mood')">
             <div class="quick-icon" style="background:var(--amber-light)">🌡️</div>
-            <div class="quick-card-title" data-i18n="qcard_mood">Mood Check</div>
-            <div class="quick-card-sub" data-i18n="qcard_mood_sub">Track how you feel</div>
+             <div class="quick-card-title" data-i18n="qcard_mood">Daily Signal</div>
+             <div class="quick-card-sub" data-i18n="qcard_mood_sub">Log context for pattern insights</div>
           </div>
           <div class="quick-card" onclick="navigate('sleep')">
             <div class="quick-icon" style="background:var(--lavender-light)">🌙</div>
-            <div class="quick-card-title" data-i18n="qcard_sleep">Sleep Log</div>
-            <div class="quick-card-sub" data-i18n="qcard_sleep_sub">Track your rest</div>
+             <div class="quick-card-title" data-i18n="qcard_sleep">Recovery Log</div>
+             <div class="quick-card-sub" data-i18n="qcard_sleep_sub">Track rest and recovery</div>
           </div>
         </div>
 
-        <div class="section-title" data-i18n="start_conv">Start a conversation</div>
-        <div class="card" style="cursor:pointer" onclick="startChat('I am feeling overwhelmed today')">
+        <div class="section-title" data-i18n="start_conv">Explore a pattern</div>
+        <div class="card" style="cursor:pointer" onclick="startChat('I keep repeating a pattern and want to understand it')">
           <div style="font-size:13px;color:var(--text-secondary);line-height:1.5">
-            <strong style="color:var(--text-primary)" data-i18n="home_vent_title">Need to vent?</strong><br>
-            <span data-i18n="home_vent_sub">Tell me what's weighing on you. No judgment, I'm listening.</span>
+            <strong style="color:var(--text-primary)" data-i18n="home_vent_title">Spot a pattern</strong><br>
+            <span data-i18n="home_vent_sub">Share what keeps repeating and connect the behavior to a useful next step.</span>
           </div>
         </div>
-        <div class="card" style="cursor:pointer" onclick="startChat('Help me focus and be productive today')">
+        <div class="card" style="cursor:pointer" onclick="startChat('Help me build a focused plan for today without burning out')">
           <div style="font-size:13px;color:var(--text-secondary);line-height:1.5">
-            <strong style="color:var(--text-primary)" data-i18n="home_focus_title">Struggling to focus?</strong><br>
-            <span data-i18n="home_focus_sub">Let's build a game plan for your day together.</span>
+            <strong style="color:var(--text-primary)" data-i18n="home_focus_title">Protect your focus</strong><br>
+            <span data-i18n="home_focus_sub">Build a practical rhythm for productivity, recovery, and burnout prevention.</span>
           </div>
         </div>
       </div>
@@ -1219,7 +1268,7 @@
       <div class="screen" id="screen-tasks">
         <div class="task-input-row">
           <input class="task-input" id="task-input" type="text"
-            data-placeholder-i18n="task_placeholder" placeholder="Add a new task..." maxlength="120" />
+            data-placeholder-i18n="task_placeholder" placeholder="Add a focus task or habit..." maxlength="120" />
           <button class="btn-add" onclick="addTask()">+</button>
         </div>
         <div class="tasks-filter-row">
@@ -1235,7 +1284,7 @@
       <div class="screen" id="screen-chat">
         <div class="conv-sidebar" id="conv-sidebar">
           <div class="conv-sidebar-header">
-            <span class="conv-sidebar-title" data-i18n="chats">Chats</span>
+             <span class="conv-sidebar-title" data-i18n="chats">Sessions</span>
             <button class="btn-new-conv" onclick="newConversation()">+ <span data-i18n="new">New</span></button>
           </div>
           <div class="conv-list" id="conv-list">
@@ -1249,21 +1298,21 @@
         <div class="chat-main">
           <div class="chat-top-bar">
             <button class="chat-menu-btn" onclick="toggleSidebar()">☰</button>
-            <span class="chat-conv-title" id="chat-conv-title" data-i18n="new_chat">New Chat</span>
+             <span class="chat-conv-title" id="chat-conv-title" data-i18n="new_chat">New Session</span>
             <button class="chat-new-btn" onclick="newConversation()">+ <span data-i18n="new">New</span></button>
           </div>
           <div class="chat-messages" id="chat-messages">
             <div class="chat-welcome">
               <div class="chat-welcome-icon">🤝</div>
-              <h3 data-i18n="chat_welcome_title">Hey, I'm Pilo</h3>
-              <p data-i18n="chat_welcome_sub">I'm here to listen, support you, and keep it real. What's on your mind?</p>
+               <h3 data-i18n="chat_welcome_title">I'm Pilo, your behavioral companion</h3>
+               <p data-i18n="chat_welcome_sub">I connect your habits, focus, and recovery signals over time so you can spot patterns and choose your next move.</p>
               <div class="chat-starters">
-                <div class="starter-chip" onclick="sendStarter(this)" data-i18n="starter1">I need to vent</div>
-                <div class="starter-chip" onclick="sendStarter(this)" data-i18n="starter2">Help me focus</div>
-                <div class="starter-chip" onclick="sendStarter(this)" data-i18n="starter3">I can't sleep</div>
-                <div class="starter-chip" onclick="sendStarter(this)" data-i18n="starter4">Feeling stressed</div>
-                <div class="starter-chip" onclick="sendStarter(this)" data-i18n="starter5">I'm overwhelmed</div>
-                <div class="starter-chip" onclick="sendStarter(this)" data-i18n="starter6">Motivate me</div>
+                 <div class="starter-chip" onclick="sendStarter(this)" data-i18n="starter1">Spot a pattern</div>
+                 <div class="starter-chip" onclick="sendStarter(this)" data-i18n="starter2">Help me focus</div>
+                 <div class="starter-chip" onclick="sendStarter(this)" data-i18n="starter3">Review my recovery</div>
+                 <div class="starter-chip" onclick="sendStarter(this)" data-i18n="starter4">Check burnout risk</div>
+                 <div class="starter-chip" onclick="sendStarter(this)" data-i18n="starter5">Review my habits</div>
+                 <div class="starter-chip" onclick="sendStarter(this)" data-i18n="starter6">Show my insights</div>
               </div>
             </div>
           </div>
@@ -1282,7 +1331,7 @@
       <!-- MOOD -->
       <div class="screen" id="screen-mood">
         <div id="mood-today-banner"></div>
-        <div class="section-title" data-i18n="mood_question">How are you feeling right now?</div>
+         <div class="section-title" data-i18n="mood_question">Log today's signal</div>
         <div class="mood-grid">
           <div class="mood-option" data-mood="happy" onclick="selectMood('happy')">
             <div class="mood-emoji">😊</div>
@@ -1304,17 +1353,17 @@
         <div class="mood-note-wrap">
           <textarea class="mood-note" id="mood-note"
             data-placeholder-i18n="mood_note_placeholder"
-            placeholder="Add a note about how you're feeling... (optional)"></textarea>
+             placeholder="Add context about this signal or what influenced it... (optional)"></textarea>
         </div>
-        <button class="btn-primary" id="save-mood-btn" onclick="saveMood()" disabled data-i18n="save_mood">Save Today's Mood</button>
-        <div class="section-title" data-i18n="mood_history_title">Recent History</div>
+         <button class="btn-primary" id="save-mood-btn" onclick="saveMood()" disabled data-i18n="save_mood">Save Today's Signal</button>
+         <div class="section-title" data-i18n="mood_history_title">Recent Signals</div>
         <div id="mood-history"></div>
       </div>
 
       <!-- SLEEP -->
       <div class="screen" id="screen-sleep">
         <div class="sleep-form-card">
-          <div class="sleep-form-title" data-i18n="sleep_log_title">🌙 Log Your Sleep</div>
+           <div class="sleep-form-title" data-i18n="sleep_log_title">🌙 Log Your Recovery</div>
           <div class="sleep-time-row">
             <div class="sleep-time-field">
               <div class="sleep-time-label" data-i18n="bedtime">Bedtime</div>
@@ -1329,10 +1378,10 @@
         </div>
         <div id="sleep-result">
           <div class="sleep-duration-big" id="sleep-hours-display">—</div>
-          <div class="sleep-duration-label" data-i18n="hours_of_sleep">hours of sleep</div>
+           <div class="sleep-duration-label" data-i18n="hours_of_sleep">hours of recovery sleep</div>
           <div class="sleep-insight-text" id="sleep-insight-text"></div>
         </div>
-        <div class="section-title" data-i18n="sleep_history_title">Sleep History</div>
+           <div class="section-title" data-i18n="sleep_history_title">Recovery History</div>
         <div id="sleep-history"></div>
       </div>
 
@@ -1341,7 +1390,7 @@
         <div class="settings-about">
           <div class="settings-about-logo">🤝</div>
           <h3>Pilo</h3>
-          <p data-i18n="app_subtitle">Your digital pillow for a calmer mind</p>
+           <p data-i18n="app_subtitle">Your behavioral intelligence companion</p>
         </div>
 
         <div class="settings-section">
@@ -1443,53 +1492,57 @@
 ═══════════════════════════════════════════════════════════ */
 const TRANSLATIONS = {
   en: {
-    app_subtitle:        "Your digital pillow for a calmer mind",
-    nav_home:            "Home", nav_chat: "Chat", nav_tasks: "Tasks",
-    nav_mood:            "Mood", nav_sleep: "Sleep", nav_settings: "Settings",
-    hero_title:          "How are you today?",
-    hero_sub:            "I'm here — tell me what's on your mind.",
+    app_subtitle:        "Your behavioral intelligence companion",
+    nav_home:            "Home", nav_chat: "Insights", nav_tasks: "Focus",
+    nav_mood:            "Signals", nav_sleep: "Recovery", nav_settings: "Settings",
+    hero_title:          "See your day more clearly",
+    hero_sub:            "Track the signals behind your habits, focus, and recovery.",
+    insight_card_title:  "AI Behavioral Insight",
+    insight_loading:     "Analyzing your recent signals...",
+    insight_empty:       "Log a few signals, recovery records, or focus tasks to unlock a personalized insight.",
+    insight_updated:     "Generated from your recent activity",
     mood_happy:          "Great", mood_okay: "Okay", mood_low: "Low", mood_stressed: "Stressed",
-    stat_tasks:          "Total Tasks", stat_active: "Active", stat_done: "Done", stat_sleep: "Last Sleep",
+    stat_tasks:          "Tracked Tasks", stat_active: "Active", stat_done: "Done", stat_sleep: "Last Recovery",
     quick_access:        "Quick Access",
-    qcard_chat:          "Talk to Pilo", qcard_chat_sub: "Chat, vent, get support",
-    qcard_tasks:         "My Tasks",    qcard_tasks_sub: "Stay on top of things",
-    qcard_mood:          "Mood Check",  qcard_mood_sub: "Track how you feel",
-    qcard_sleep:         "Sleep Log",   qcard_sleep_sub: "Track your rest",
-    start_conv:          "Start a conversation",
-    home_vent_title:     "Need to vent?",
-    home_vent_sub:       "Tell me what's weighing on you. No judgment, I'm listening.",
-    home_focus_title:    "Struggling to focus?",
-    home_focus_sub:      "Let's build a game plan for your day together.",
-    task_placeholder:    "Add a new task...",
+    qcard_chat:          "Ask Pilo", qcard_chat_sub: "Explore patterns and next steps",
+    qcard_tasks:         "Focus Plan", qcard_tasks_sub: "Turn intentions into momentum",
+    qcard_mood:          "Daily Signal", qcard_mood_sub: "Log context for pattern insights",
+    qcard_sleep:         "Recovery Log", qcard_sleep_sub: "Track rest and recovery",
+    start_conv:          "Explore a pattern",
+    home_vent_title:     "Spot a pattern",
+    home_vent_sub:       "Share what keeps repeating and connect the behavior to a useful next step.",
+    home_focus_title:    "Protect your focus",
+    home_focus_sub:      "Build a practical rhythm for productivity, recovery, and burnout prevention.",
+    task_placeholder:    "Add a focus task or habit...",
     filter_all:          "All", filter_todo: "Todo", filter_active: "Active", filter_done: "Done",
     btn_start:           "▶ Start", btn_complete: "✓ Done", btn_undo: "↩ Undo", btn_edit: "✎ Edit", btn_delete: "✕",
     save_edit:           "Save", cancel_edit: "Cancel",
-    task_empty_all:      "No tasks yet. Add something to get started.",
-    task_empty_todo:     "No to-do tasks. Great job!",
-    task_empty_active:   "No active tasks right now.",
-    task_empty_done:     "No completed tasks yet. Keep going!",
+    task_empty_all:      "No focus tasks yet. Add one to start building momentum.",
+    task_empty_todo:     "No queued tasks. Your focus plan is clear.",
+    task_empty_active:   "No active tasks right now. Choose the next useful step.",
+    task_empty_done:     "No completed tasks yet. Progress starts with one step.",
     toast_task_added:    "Task added!", toast_task_deleted: "Task deleted", toast_task_saved: "Task saved!",
-    chats:               "Chats", new: "New", new_chat: "New Chat",
-    no_convs:            "No conversations yet",
-    chat_welcome_title:  "Hey, I'm Pilo",
-    chat_welcome_sub:    "I'm here to listen, support you, and keep it real. What's on your mind?",
-    chat_placeholder:    "Say something...",
-    starter1: "I need to vent", starter2: "Help me focus", starter3: "I can't sleep",
-    starter4: "Feeling stressed", starter5: "I'm overwhelmed", starter6: "Motivate me",
-    mood_question:       "How are you feeling right now?",
+    chats:               "Sessions", new: "New", new_chat: "New Session",
+    no_convs:            "No insight sessions yet",
+    chat_welcome_title:  "I'm Pilo, your behavioral companion",
+    chat_welcome_sub:    "I connect your habits, focus, and recovery signals over time so you can spot patterns and choose your next move.",
+    chat_placeholder:    "Describe a behavior, habit, or pattern...",
+    starter1: "Spot a pattern", starter2: "Help me focus", starter3: "Review my recovery",
+    starter4: "Check burnout risk", starter5: "Review my habits", starter6: "Show my insights",
+    mood_question:       "Log today's signal",
     mood_happy_label:    "Happy", mood_neutral_label: "Neutral",
     mood_sad_label:      "Sad",   mood_stressed_label: "Stressed",
-    mood_note_placeholder: "Add a note about how you're feeling... (optional)",
-    save_mood:           "Save Today's Mood",
-    mood_history_title:  "Recent History",
-    today_mood_label:    "Today's mood",
+    mood_note_placeholder: "Add context about this signal or what influenced it... (optional)",
+    save_mood:           "Save Today's Signal",
+    mood_history_title:  "Recent Signals",
+    today_mood_label:    "Today's signal",
     today_badge:         "Today",
-    mood_edit_hint:      "✎ You can change today's mood any time",
-    sleep_log_title:     "🌙 Log Your Sleep",
+    mood_edit_hint:      "✎ You can update today's signal any time",
+    sleep_log_title:     "🌙 Log Your Recovery",
     bedtime:             "Bedtime", wakeup:  "Wake up",
     sleep_save_btn:      "Calculate & Save",
-    hours_of_sleep:      "hours of sleep",
-    sleep_history_title: "Sleep History",
+    hours_of_sleep:      "hours of recovery sleep",
+    sleep_history_title: "Recovery History",
     settings_appearance: "Appearance",
     dark_mode:           "Dark Mode", dark_mode_sub: "Easy on the eyes at night",
     settings_language:   "Language",
@@ -1497,58 +1550,62 @@ const TRANSLATIONS = {
     settings_about:      "About",
     version:             "Version",
     privacy:             "Privacy First", privacy_sub: "Your data stays on your device",
-    toast_mood_saved:    "Mood saved!",
-    toast_mood_updated:  "Mood updated!",
-    toast_sleep_saved:   "Sleep logged!",
+    toast_mood_saved:    "Signal saved!",
+    toast_mood_updated:  "Signal updated!",
+    toast_sleep_saved:   "Recovery logged!",
   },
   ar: {
-    app_subtitle:        "وسادتك الرقمية لعقل أهدأ",
-    nav_home:            "الرئيسية", nav_chat: "دردشة", nav_tasks: "المهام",
-    nav_mood:            "المزاج", nav_sleep: "النوم", nav_settings: "الإعدادات",
-    hero_title:          "كيف حالك اليوم؟",
-    hero_sub:            "أنا هنا — قولي اللي في بالك.",
+    app_subtitle:        "رفيقك الذكي لفهم سلوكك",
+    nav_home:            "الرئيسية", nav_chat: "الرؤى", nav_tasks: "التركيز",
+    nav_mood:            "الإشارات", nav_sleep: "التعافي", nav_settings: "الإعدادات",
+    hero_title:          "شوف يومك بوضوح أكثر",
+    hero_sub:            "تابع الإشارات وراء عاداتك وتركيزك وتعافيك.",
+    insight_card_title:  "رؤية سلوكية بالذكاء الاصطناعي",
+    insight_loading:     "أحلل إشاراتك الأخيرة...",
+    insight_empty:       "سجّل بعض الإشارات أو التعافي أو مهام التركيز لتحصل على رؤية شخصية.",
+    insight_updated:     "مُولّدة من نشاطك الأخير",
     mood_happy:          "زين", mood_okay: "ماشي", mood_low: "تعبان", mood_stressed: "مضغوط",
-    stat_tasks:          "المهام", stat_active: "نشط", stat_done: "منجز", stat_sleep: "آخر نوم",
+    stat_tasks:          "المهام المتابعة", stat_active: "نشط", stat_done: "منجز", stat_sleep: "آخر تعافٍ",
     quick_access:        "وصول سريع",
-    qcard_chat:          "تكلم بيلو", qcard_chat_sub: "دردش، عبّر، احصل على دعم",
-    qcard_tasks:         "مهامي",     qcard_tasks_sub: "كن على المستوى",
-    qcard_mood:          "تفقد مزاجك", qcard_mood_sub: "تابع كيف تشعر",
-    qcard_sleep:         "سجل النوم",  qcard_sleep_sub: "تابع راحتك",
-    start_conv:          "ابدأ محادثة",
-    home_vent_title:     "محتاج تفضفض؟",
-    home_vent_sub:       "قولي اللي يثقلك. بلا حكم، أنا أسمعك.",
-    home_focus_title:    "تعبان تركّز؟",
-    home_focus_sub:      "خلينا نبني خطة يومك مع بعض.",
-    task_placeholder:    "أضف مهمة جديدة...",
+    qcard_chat:          "اسأل بيلو", qcard_chat_sub: "اكتشف الأنماط والخطوات التالية",
+    qcard_tasks:         "خطة التركيز", qcard_tasks_sub: "حوّل نواياك إلى تقدم",
+    qcard_mood:          "إشارة اليوم", qcard_mood_sub: "سجّل سياقاً لاكتشاف الأنماط",
+    qcard_sleep:         "سجل التعافي", qcard_sleep_sub: "تابع الراحة والتعافي",
+    start_conv:          "اكتشف نمطاً",
+    home_vent_title:     "لاحظ نمطاً متكرراً",
+    home_vent_sub:       "شارك ما يتكرر معك واربط السلوك بخطوة عملية مفيدة.",
+    home_focus_title:    "احمِ تركيزك",
+    home_focus_sub:      "ابنِ إيقاعاً عملياً للإنتاجية والتعافي والوقاية من الاحتراق.",
+    task_placeholder:    "أضف مهمة تركيز أو عادة...",
     filter_all:          "الكل", filter_todo: "قائمة", filter_active: "نشط", filter_done: "منجز",
     btn_start:           "▶ ابدأ", btn_complete: "✓ خلصت", btn_undo: "↩ تراجع", btn_edit: "✎ عدّل", btn_delete: "✕",
     save_edit:           "حفظ", cancel_edit:  "إلغاء",
-    task_empty_all:      "ما في مهام بعد. أضف شيء للبداية.",
-    task_empty_todo:     "ما في مهام جديدة. أحسنت!",
-    task_empty_active:   "ما في مهام نشطة الآن.",
-    task_empty_done:     "ما أنجزت شيء بعد. واصل!",
+    task_empty_all:      "ما في مهام تركيز بعد. أضف مهمة لبداية التقدم.",
+    task_empty_todo:     "ما في مهام في الانتظار. خطة تركيزك واضحة.",
+    task_empty_active:   "ما في مهام نشطة الآن. اختر الخطوة المفيدة التالية.",
+    task_empty_done:     "ما في مهام منجزة بعد. التقدم يبدأ بخطوة.",
     toast_task_added:    "تمت إضافة المهمة!", toast_task_deleted: "حُذفت المهمة", toast_task_saved: "حُفظت المهمة!",
-    chats:               "المحادثات", new: "جديد", new_chat: "دردشة جديدة",
-    no_convs:            "لا محادثات بعد",
-    chat_welcome_title:  "أهلاً، أنا بيلو",
-    chat_welcome_sub:    "أنا هنا أسمعك وأدعمك. قولي اللي في بالك.",
-    chat_placeholder:    "قول شيء...",
-    starter1: "محتاج أتكلم", starter2: "ساعدني أركّز", starter3: "ما أقدر أنام",
-    starter4: "حاسس بضغط", starter5: "أنا مرهق", starter6: "حفّزني",
-    mood_question:       "كيف تحس الحين؟",
+    chats:               "الجلسات", new: "جديد", new_chat: "جلسة جديدة",
+    no_convs:            "لا توجد جلسات رؤى بعد",
+    chat_welcome_title:  "أنا بيلو، رفيقك لفهم السلوك",
+    chat_welcome_sub:    "أربط إشارات عاداتك وتركيزك وتعافيك مع الوقت لتلاحظ الأنماط وتختار خطوتك التالية.",
+    chat_placeholder:    "صف سلوكاً أو عادة أو نمطاً...",
+    starter1: "اكتشف نمطاً", starter2: "ساعدني أركّز", starter3: "راجع تعافيّي",
+    starter4: "افحص خطر الاحتراق", starter5: "راجع عاداتي", starter6: "اعرض رؤاي",
+    mood_question:       "سجّل إشارة اليوم",
     mood_happy_label:    "سعيد", mood_neutral_label: "عادي",
     mood_sad_label:      "حزين", mood_stressed_label: "مضغوط",
-    mood_note_placeholder: "اكتب ملاحظة عن مشاعرك... (اختياري)",
-    save_mood:           "احفظ مزاج اليوم",
-    mood_history_title:  "السجل الأخير",
-    today_mood_label:    "مزاج اليوم",
+    mood_note_placeholder: "أضف سياقاً عن هذه الإشارة أو ما أثر فيها... (اختياري)",
+    save_mood:           "احفظ إشارة اليوم",
+    mood_history_title:  "الإشارات الأخيرة",
+    today_mood_label:    "إشارة اليوم",
     today_badge:         "اليوم",
-    mood_edit_hint:      "✎ تقدر تغيّر مزاج اليوم في أي وقت",
-    sleep_log_title:     "🌙 سجّل نومك",
+    mood_edit_hint:      "✎ تقدر تحدّث إشارة اليوم في أي وقت",
+    sleep_log_title:     "🌙 سجّل تعافيك",
     bedtime:             "وقت النوم", wakeup: "وقت الصحيان",
     sleep_save_btn:      "احسب واحفظ",
-    hours_of_sleep:      "ساعات نوم",
-    sleep_history_title: "سجل النوم",
+    hours_of_sleep:      "ساعات نوم للتعافي",
+    sleep_history_title: "سجل التعافي",
     settings_appearance: "المظهر",
     dark_mode:           "الوضع الداكن", dark_mode_sub: "مريح للعين في الليل",
     settings_language:   "اللغة",
@@ -1556,9 +1613,9 @@ const TRANSLATIONS = {
     settings_about:      "حول",
     version:             "الإصدار",
     privacy:             "الخصوصية أولاً", privacy_sub: "بياناتك تبقى على جهازك",
-    toast_mood_saved:    "حُفظ المزاج!",
-    toast_mood_updated:  "تم تحديث المزاج!",
-    toast_sleep_saved:   "سُجّل النوم!",
+    toast_mood_saved:    "حُفظت الإشارة!",
+    toast_mood_updated:  "تم تحديث الإشارة!",
+    toast_sleep_saved:   "سُجّل التعافي!",
   }
 };
 
@@ -1603,6 +1660,7 @@ function setLanguage(lang) {
   document.getElementById('lang-en').classList.toggle('active', lang === 'en');
   document.getElementById('lang-ar').classList.toggle('active', lang === 'ar');
   applyTranslations();
+  loadHomeInsight();
   saveSettings({ language: lang });
 }
 
@@ -1729,6 +1787,24 @@ function refreshHomeStats() {
   }
 }
 
+async function loadHomeInsight() {
+  const textEl = document.getElementById('home-insight-text');
+  const metaEl = document.getElementById('home-insight-meta');
+  if (!textEl) return;
+
+  textEl.textContent = t('insight_loading');
+  if (metaEl) metaEl.textContent = '';
+
+  try {
+    const r = await fetch(`${API_BASE_URL}insights/home?lang=${encodeURIComponent(state.lang)}`);
+    const d = await r.json();
+    textEl.textContent = d.insight || t('insight_empty');
+    if (metaEl && d.insight) metaEl.textContent = t('insight_updated');
+  } catch(_) {
+    textEl.textContent = t('insight_empty');
+  }
+}
+
 function todayStr() {
   return new Date().toISOString().split('T')[0];
 }
@@ -1772,6 +1848,7 @@ async function addTask() {
     inp.value = '';
     renderTasks();
     refreshHomeStats();
+    loadHomeInsight();
     toast(t('toast_task_added'));
   } catch(_) { toast('Could not save task'); }
 }
@@ -1788,6 +1865,7 @@ async function setTaskStatus(id, status) {
     if (idx !== -1) state.tasks[idx] = normaliseTask(d.task);
     renderTasks();
     refreshHomeStats();
+    loadHomeInsight();
   } catch(_) {}
 }
 
@@ -1797,6 +1875,7 @@ async function deleteTask(id) {
     state.tasks = state.tasks.filter(tk => tk.id !== id);
     renderTasks();
     refreshHomeStats();
+    loadHomeInsight();
     toast(t('toast_task_deleted'));
   } catch(_) {}
 }
@@ -1814,6 +1893,7 @@ async function saveTaskEdit(id, newTitle) {
     if (idx !== -1) state.tasks[idx] = normaliseTask(d.task);
     renderTasks();
     toast(t('toast_task_saved'));
+    loadHomeInsight();
   } catch(_) {}
 }
 
@@ -2015,7 +2095,7 @@ async function selectConversation(id) {
       container.innerHTML = `<div class="chat-welcome">
         <div class="chat-welcome-icon">🤝</div>
         <h3>${escHtml(conv.title)}</h3>
-        <p>Continue your conversation...</p>
+        <p>Continue building your behavioral insight...</p>
       </div>`;
     } else {
       messages.forEach(m => {
@@ -2028,7 +2108,7 @@ async function selectConversation(id) {
       container.scrollTop = container.scrollHeight;
     }
   } catch(_) {
-    container.innerHTML = '<div class="empty-state"><div class="empty-icon">⚠️</div><p>Could not load conversation.</p></div>';
+    container.innerHTML = '<div class="empty-state"><div class="empty-icon">⚠️</div><p>Could not load insight session.</p></div>';
   }
   renderConvList();
 }
@@ -2040,7 +2120,7 @@ async function deleteConversation(event, id) {
     state.conversations = state.conversations.filter(c => c.id !== id);
     if (state.currentConvId === id) newConversation();
     else renderConvList();
-    toast('Conversation deleted');
+    toast('Insight session deleted');
   } catch(_) {}
 }
 
@@ -2120,7 +2200,7 @@ async function sendMessage() {
     const d = await response.json();
     hideTyping();
 
-    const reply = d.reply || "I'm here, keep talking.";
+    const reply = d.reply || "I’m ready to help you examine the pattern. Try again.";
     appendMsg('ai', reply);
     state.currentChatHistory.push({ role: 'assistant', content: reply });
 
@@ -2140,7 +2220,7 @@ async function sendMessage() {
     renderConvList();
   } catch(_) {
     hideTyping();
-    appendMsg('ai', "Something went wrong on my end — but I'm still here. Try again?");
+    appendMsg('ai', "I couldn’t complete that insight just now. Try again?");
   }
   if (sendBtn) sendBtn.disabled = false;
 }
@@ -2241,6 +2321,7 @@ async function saveMood() {
     toast(d.updated ? t('toast_mood_updated') : t('toast_mood_saved'));
     loadMoodHistory();
     refreshHomeStats();
+    loadHomeInsight();
     updateMoodTodayBanner();
   } catch(_) { toast('Could not save mood'); }
   if (saveBtn) saveBtn.disabled = true;
@@ -2296,7 +2377,7 @@ function renderMoodHistory() {
   };
   const today = todayStr();
   if (!state.moods.length) {
-    el.innerHTML = `<div class="empty-state"><div class="empty-icon">🌡️</div><p>No mood entries yet. Log how you're feeling!</p></div>`;
+    el.innerHTML = `<div class="empty-state"><div class="empty-icon">🌡️</div><p>No daily signals yet. Log one to start seeing patterns!</p></div>`;
     return;
   }
   el.innerHTML = state.moods.map(m => `
@@ -2333,6 +2414,7 @@ async function saveSleep() {
     toast(t('toast_sleep_saved'));
     loadSleepHistory();
     refreshHomeStats();
+    loadHomeInsight();
   } catch(_) { toast('Could not save sleep data'); }
 }
 
@@ -2349,7 +2431,7 @@ function renderSleepHistory() {
   const el = document.getElementById('sleep-history');
   if (!el) return;
   if (!state.sleep.length) {
-    el.innerHTML = `<div class="empty-state"><div class="empty-icon">🌙</div><p>No sleep records yet. Log your first night!</p></div>`;
+    el.innerHTML = `<div class="empty-state"><div class="empty-icon">🌙</div><p>No recovery records yet. Log your first night!</p></div>`;
     return;
   }
   el.innerHTML = state.sleep.map(r => `
@@ -2402,6 +2484,7 @@ async function init() {
   setGreeting();
   await Promise.all([loadTasks(), loadMoodHistory(), loadSleepHistory()]);
   refreshHomeStats();
+  await loadHomeInsight();
 }
 
 init();
