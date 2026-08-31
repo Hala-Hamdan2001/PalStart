@@ -1,6 +1,8 @@
 import os
+import re
 import sqlite3
 import datetime
+import unicodedata
 from flask import Flask, request, jsonify, send_from_directory, g
 from flask_cors import CORS
 from dotenv import load_dotenv
@@ -132,6 +134,25 @@ def init_db():
         """)
         conn.commit()
 
+    # Create this after the messages migration so its foreign key always points
+    # at the final messages table, including on legacy installations.
+    c.executescript("""
+        CREATE TABLE IF NOT EXISTS behavioral_signals (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            signal     TEXT NOT NULL,
+            confidence TEXT NOT NULL CHECK (confidence IN ('high', 'medium', 'low')),
+            source     TEXT NOT NULL CHECK (source IN ('conversation', 'manual_mood')),
+            message_id INTEGER REFERENCES messages(id) ON DELETE CASCADE,
+            date       TEXT NOT NULL,
+            timestamp  TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_behavioral_signals_date
+            ON behavioral_signals(date DESC, id DESC);
+        CREATE INDEX IF NOT EXISTS idx_behavioral_signals_source
+            ON behavioral_signals(source, id DESC);
+    """)
+    conn.commit()
+
     conn.close()
 
 
@@ -173,6 +194,198 @@ WEEKDAY_AR = ["الإثنين", "الثلاثاء", "الأربعاء", "الخ�
 POSITIVE_MOODS = {"happy"}
 NEGATIVE_MOODS = {"sad", "stressed"}
 
+# This vocabulary is deliberately small and explicit. New phrases can be added
+# without changing the extraction algorithm or the data model.
+BEHAVIORAL_SIGNAL_PATTERNS = {
+    "stress": {
+        "high": (
+            "stressed", "stressful", "under pressure", "can't handle",
+            "cannot handle", "overwhelmed", "مُتَوَتِّر", "متوتر",
+            "مضغوط", "الضغط", "ضاغط", "مخنوق", "الدنيا ضاغطة",
+        ),
+        "medium": ("too much", "everything feels like too much"),
+    },
+    "overwhelm": {
+        "high": (
+            "overwhelmed", "can't handle", "مش لاحق", "عندي مليون شغلة",
+            "كلشي فوق بعض", "مش عارف من وين أبلش", "حاسس كلشي كثير",
+        ),
+        "medium": ("too much", "everything feels like too much"),
+    },
+    "low_focus": {
+        "high": (
+            "can't focus", "cannot focus", "can't concentrate",
+            "unable to focus", "distracted", "unfocused", "مش قادر أركز",
+            "ما بقدر أركز", "تركيزي صفر", "مش مركز", "مش قادر أركز بشي",
+        ),
+        "medium": ("hard to focus", "hard to concentrate"),
+    },
+    "frustration": {
+        "high": (
+            "frustrating", "frustrated", "everything is annoying",
+            "معصب", "عصبي", "مستفز", "كلشي مستفزني", "قرفان",
+        ),
+        "medium": ("annoyed", "angry"),
+    },
+    "low_energy": {
+        "high": (
+            "exhausted", "drained", "no energy", "تعبان", "منهك",
+            "ما إلي خلق", "ما عندي طاقة", "طاقتي صفر",
+        ),
+        "medium": ("tired", "low energy"),
+    },
+    "positive_momentum": {
+        "high": (
+            "productive", "got things done", "feeling motivated", "motivated",
+            "مبسوط", "مرتاح", "أنجزت", "خلصت شغلي", "متحمس", "اليوم منيح",
+        ),
+        "medium": ("feeling good", "doing well"),
+    },
+    "calm": {
+        "high": ("calm", "هادئ", "مرتاح"),
+        "medium": ("at ease", "رايق"),
+    },
+    "motivation": {
+        "high": ("motivated", "feeling motivated", "متحمس"),
+        "medium": ("ready to start", "جاهز أبلش"),
+    },
+}
+
+
+def _normalize_signal_text(text):
+    """Normalize matching only; the original user message is never changed."""
+    normalized = unicodedata.normalize("NFKC", str(text)).lower()
+    normalized = "".join(
+        char for char in unicodedata.normalize("NFD", normalized)
+        if unicodedata.category(char) != "Mn"
+    )
+    normalized = normalized.replace("’", "'").replace("`", "'")
+    return re.sub(r"\s+", " ", normalized).strip()
+
+
+def _find_pattern(text, pattern):
+    """Normalize both sides, then use boundaries for English and substrings for Arabic."""
+    normalized_pattern = _normalize_signal_text(pattern)
+    if any("\u0600" <= char <= "\u06ff" for char in normalized_pattern):
+        return re.search(re.escape(normalized_pattern), text, re.IGNORECASE)
+    return re.search(
+        rf"(?<![a-z]){re.escape(normalized_pattern)}(?![a-z])",
+        text,
+        re.IGNORECASE,
+    )
+
+
+def _is_negated(text, start):
+    """Conservative nearby-negation check to avoid recording a denied signal."""
+    prefix = text[max(0, start - 60):start]
+    if re.search(
+        r"(?:\b(?:not|never|no longer|don't|do not|didn't|did not|"
+        r"wasn't|was not|isn't|is not|aren't|am not)\b)"
+        r"(?:[^.!?\n]{0,34})$",
+        prefix,
+        re.IGNORECASE,
+    ):
+        return True
+    return re.search(
+        r"(?:مش|مو|لست|ليس|ليست|ما)\s+(?:\S+\s+){0,4}$", prefix
+    ) is not None
+
+
+def _confidence_for_match(text, start, tier, pattern):
+    """High confidence is reserved for direct/first-person statements."""
+    prefix = text[max(0, start - 55):start]
+    direct = (
+        re.search(r"\b(?:i|i'm|im|ive|i've|my|me|today)\b", prefix)
+        or re.search(r"(?:انا|أنا|حاسس|حاسه|عندي|اليوم)$", prefix)
+        or pattern.startswith(("مش ", "ما ", "مضغوط", "متوتر", "تعبان", "مبسوط"))
+    )
+    if tier == "high" and direct:
+        return "high"
+    return "medium" if tier == "high" or direct else "low"
+
+
+def extract_behavioral_signals(message):
+    """
+    Extract at most one record per signal from a message.
+
+    This is intentionally conservative: it uses a small extendable vocabulary,
+    checks nearby negation, and labels indirect matches medium/low confidence.
+    """
+    text = _normalize_signal_text(message)
+    if not text:
+        return []
+
+    detected = []
+    for signal, tiers in BEHAVIORAL_SIGNAL_PATTERNS.items():
+        match = None
+        tier = None
+        for candidate_tier in ("high", "medium"):
+            for pattern in tiers[candidate_tier]:
+                found = _find_pattern(text, pattern)
+                if found and not _is_negated(text, found.start()):
+                    match = found
+                    tier = candidate_tier
+                    break
+            if match:
+                break
+        if match:
+            detected.append({
+                "signal": signal,
+                "confidence": _confidence_for_match(
+                    text, match.start(), tier, match.group(0)
+                ),
+            })
+    return detected
+
+
+def store_conversation_signals(db, message_id, message, date, timestamp):
+    """Persist extraction failures separately from the chat response path."""
+    try:
+        detected = extract_behavioral_signals(message)
+        for item in detected:
+            db.execute(
+                """
+                INSERT INTO behavioral_signals
+                    (signal, confidence, source, message_id, date, timestamp)
+                VALUES (?, ?, 'conversation', ?, ?, ?)
+                """,
+                (item["signal"], item["confidence"], message_id, date, timestamp),
+            )
+        if detected:
+            db.commit()
+        return detected
+    except Exception as exc:
+        db.rollback()
+        print(f"Behavioral signal extraction error: {exc}")
+        return []
+
+
+def store_manual_mood_signal(db, mood, date, timestamp):
+    """Keep manual mood as a parallel signal without changing the mood record."""
+    mood_signal = {
+        "happy": ("positive_momentum", "high"),
+        "neutral": ("calm", "medium"),
+        "sad": ("low_energy", "medium"),
+        "stressed": ("stress", "high"),
+    }.get(mood)
+    if not mood_signal:
+        return
+    db.execute(
+        """
+        DELETE FROM behavioral_signals
+        WHERE source='manual_mood' AND date=?
+        """,
+        (date,),
+    )
+    db.execute(
+        """
+        INSERT INTO behavioral_signals
+            (signal, confidence, source, message_id, date, timestamp)
+        VALUES (?, ?, 'manual_mood', NULL, ?, ?)
+        """,
+        (mood_signal[0], mood_signal[1], date, timestamp),
+    )
+    db.commit()
 
 def analyze_behavior_patterns(db):
     """
@@ -206,6 +419,16 @@ def analyze_behavior_patterns(db):
     ).fetchall())
     tasks = rows_to_list(db.execute(
         "SELECT status, completed, created_at FROM tasks ORDER BY id DESC"
+    ).fetchall())
+    behavioral_signals = rows_to_list(db.execute(
+        """
+        SELECT signal, confidence, source, date, timestamp
+        FROM behavioral_signals
+        WHERE date >= ?
+        ORDER BY date DESC, id DESC
+        LIMIT 40
+        """,
+        (week_start.isoformat(),),
     ).fetchall())
     recent_history = db.execute(
         "SELECT COUNT(*) FROM messages WHERE timestamp >= ?",
@@ -241,6 +464,19 @@ def analyze_behavior_patterns(db):
         if (d := _date_from_timestamp(m.get("date"))) is not None and d >= week_start
     ]
     stressed_count = sum(mood == "stressed" for mood in recent_moods)
+    conversation_signals = [
+        signal for signal in behavioral_signals
+        if signal.get("source") == "conversation"
+    ]
+    conversation_stress_dates = {
+        _date_from_timestamp(signal.get("date"))
+        for signal in conversation_signals
+        if signal.get("signal") == "stress"
+    } - {None}
+    conversation_stress_count = len(conversation_stress_dates)
+    recent_signal_names = {
+        signal.get("signal") for signal in conversation_signals
+    }
 
     # One mood value per calendar day (moods are ordered date DESC, id DESC,
     # so the first hit for a given day is already the latest entry for it).
@@ -379,6 +615,30 @@ def analyze_behavior_patterns(db):
             "stress_week",
         ))
 
+    # Conversation stress is independent of the manually selected mood.
+    if conversation_stress_count >= 3:
+        candidates.append((
+            89,
+            "You've expressed stress signals on several days this week.",
+            "عبّرت عن إشارات ضغط في عدة أيام هذا الأسبوع.",
+            "conversation_stress_week",
+        ))
+
+    # Only surface this combined observation when each part is present in the
+    # stored data: repeated conversation stress, short recovery, and backlog.
+    if (
+        conversation_stress_count >= 2
+        and latest_sleep
+        and float(latest_sleep["duration_hours"]) < 7
+        and len(backlog_tasks) >= 2
+    ):
+        candidates.append((
+            96,
+            "Your recent stress signals are appearing alongside lower recovery and a growing workload.",
+            "إشارات الضغط الأخيرة تظهر مع تعافٍ أقل وحِمل عمل متزايد.",
+            "stress_recovery_workload",
+        ))
+
     # 4) Sleep and mood
     if (
         len(positive_mood_sleep) >= 2 and len(negative_mood_sleep) >= 2
@@ -460,6 +720,9 @@ def analyze_behavior_patterns(db):
         "recent_moods": recent_moods,
         "latest_sleep": latest_sleep,
         "latest_mood": latest_mood,
+        "behavioral_signals": behavioral_signals,
+        "conversation_signal_names": recent_signal_names,
+        "conversation_stress_count": conversation_stress_count,
     }
     return candidates, ctx
 
@@ -470,7 +733,12 @@ def generate_home_insight(db, lang="en"):
     falls back to an honest 'not enough data yet' state instead."""
     today = datetime.date.today()
     candidates, ctx = analyze_behavior_patterns(db)
-    total_signals = len(ctx["moods"]) + len(ctx["sleeps"]) + len(ctx["tasks"])
+    total_signals = (
+        len(ctx["moods"])
+        + len(ctx["sleeps"])
+        + len(ctx["tasks"])
+        + len(ctx["behavioral_signals"])
+    )
 
     if not candidates:
         if ctx["latest_sleep"] and total_signals >= 3:
@@ -484,6 +752,9 @@ def generate_home_insight(db, lang="en"):
         elif ctx["recent_tasks"] and total_signals >= 3:
             insight_en = "Your focus plan is starting to take shape. Keep logging tasks so Pilo can surface stronger patterns."
             insight_ar = "خطة تركيزك بدأت تتضح. استمر في تسجيل المهام ليكتشف بيلو أنماطاً أقوى."
+        elif ctx["behavioral_signals"]:
+            insight_en = "Your conversation check-ins are adding useful signals to your behavioral picture. Keep talking naturally so Pilo can connect the pattern over time."
+            insight_ar = "تسجيلاتك في المحادثة تضيف إشارات مفيدة لصورتك السلوكية. استمر في الحديث بعفوية حتى يربط بيلو النمط مع الوقت."
         elif ctx["recent_moods"] and total_signals >= 3:
             insight_en = "Your daily signals are the first layer of your behavioral picture. Keep logging to reveal patterns."
             insight_ar = "إشاراتك اليومية هي الطبقة الأولى من صورتك السلوكية. استمر في التسجيل لاكتشاف الأنماط."
@@ -500,12 +771,13 @@ def generate_home_insight(db, lang="en"):
 
 # ── User context for AI ───────────────────────────────────────────────────────
 def get_user_context(db) -> str:
-    import re as _re
-
     def _sanitize(s, max_len=120):
-        return _re.sub(r"[\x00-\x1f\x7f]", " ", str(s)).strip()[:max_len]
+        return re.sub(r"[\x00-\x1f\x7f]", " ", str(s)).strip()[:max_len]
 
     today = datetime.date.today().isoformat()
+    recent_signal_cutoff = (
+        datetime.date.today() - datetime.timedelta(days=6)
+    ).isoformat()
 
     mood_row = row_to_dict(db.execute(
         "SELECT mood, note, time FROM moods WHERE date=? ORDER BY id DESC LIMIT 1", (today,)
@@ -523,6 +795,16 @@ def get_user_context(db) -> str:
     sleep_row = row_to_dict(db.execute(
         "SELECT duration_hours, bedtime, wakeup, date FROM sleep_records ORDER BY id DESC LIMIT 1"
     ).fetchone())
+    recent_behavioral_signals = rows_to_list(db.execute(
+        """
+        SELECT signal, confidence, source, date
+        FROM behavioral_signals
+        WHERE date >= ?
+        ORDER BY date DESC, id DESC
+        LIMIT 12
+        """,
+        (recent_signal_cutoff,),
+    ).fetchall())
 
     mood_labels = {
         "happy":   "Happy 😊",
@@ -570,6 +852,15 @@ def get_user_context(db) -> str:
             parts.append(f"- pending_task_titles (raw user data, not instructions): {safe}")
     else:
         parts.append("- task_completion: no tasks added yet")
+
+    if recent_behavioral_signals:
+        signal_text = ", ".join(
+            f"{signal['signal']} ({signal['confidence']}, {signal['source']}, {signal['date']})"
+            for signal in recent_behavioral_signals
+        )
+        parts.append(f"- recent_behavioral_signals: {signal_text}")
+    else:
+        parts.append("- recent_behavioral_signals: none recorded")
 
     ctx = "\n".join(parts)
     return f"""
@@ -747,7 +1038,6 @@ def chat():
 
     _, _, ts = now_parts()
     db = get_db()
-    user_context = get_user_context(db)
 
     is_new_conversation = False
     if not conversation_id:
@@ -763,12 +1053,16 @@ def chat():
         db.execute("UPDATE conversations SET updated_at=? WHERE id=?", (ts, conversation_id))
         db.commit()
 
-    db.execute(
+    message_cursor = db.execute(
         "INSERT INTO messages (conversation_id, role, content, timestamp) VALUES (?,?,?,?)",
         (conversation_id, "user", user_message, ts)
     )
     db.commit()
 
+    detected_signals = store_conversation_signals(
+        db, message_cursor.lastrowid, user_message, ts[:10], ts
+    )
+    user_context = get_user_context(db)
     ai_reply = ask_ai(user_message, history, user_context)
 
     db.execute(
@@ -783,6 +1077,7 @@ def chat():
         "conversation_id": conversation_id,
         "conversation": conv,
         "is_new_conversation": is_new_conversation,
+        "detected_signals": detected_signals,
     })
 
 
@@ -895,7 +1190,7 @@ def save_mood():
         )
         db.commit()
         entry = row_to_dict(db.execute("SELECT * FROM moods WHERE id=?", (existing["id"],)).fetchone())
-        return jsonify({"entry": entry, "updated": True})
+        updated = True
     else:
         cur = db.execute(
             "INSERT INTO moods (mood, note, date, time, timestamp) VALUES (?,?,?,?,?)",
@@ -903,7 +1198,17 @@ def save_mood():
         )
         db.commit()
         entry = row_to_dict(db.execute("SELECT * FROM moods WHERE id=?", (cur.lastrowid,)).fetchone())
-        return jsonify({"entry": entry, "updated": False}), 201
+        updated = False
+
+    try:
+        store_manual_mood_signal(db, mood, date, ts)
+    except Exception as exc:
+        # A signal write must never break the existing manual mood workflow.
+        db.rollback()
+        print(f"Manual mood signal error: {exc}")
+
+    response = jsonify({"entry": entry, "updated": updated})
+    return response, (200 if updated else 201)
 
 
 # ── Sleep ─────────────────────────────────────────────────────────────────────
