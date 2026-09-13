@@ -1211,6 +1211,41 @@ def save_mood():
     return response, (200 if updated else 201)
 
 
+@app.route("/mood/<int:record_id>", methods=["PATCH"])
+def edit_mood(record_id):
+    """Edit an existing signal's mood/note, preserving its original date."""
+    db = get_db()
+    existing = db.execute("SELECT * FROM moods WHERE id=?", (record_id,)).fetchone()
+    if not existing:
+        return jsonify({"error": "Signal not found."}), 404
+
+    data = request.get_json() or {}
+    mood = (data.get("mood") or "").strip()
+    note = (data.get("note") or "").strip()
+    if mood not in VALID_MOODS:
+        return jsonify({"error": f"Mood must be one of {VALID_MOODS}"}), 400
+
+    db.execute(
+        "UPDATE moods SET mood=?, note=? WHERE id=?",
+        (mood, note, record_id),
+    )
+    db.commit()
+    entry = row_to_dict(db.execute("SELECT * FROM moods WHERE id=?", (record_id,)).fetchone())
+    return jsonify({"entry": entry, "updated": True}), 200
+
+
+@app.route("/mood/<int:record_id>", methods=["DELETE"])
+def delete_mood(record_id):
+    db = get_db()
+    existing = db.execute("SELECT id FROM moods WHERE id=?", (record_id,)).fetchone()
+    if not existing:
+        return jsonify({"error": "Signal not found."}), 404
+
+    db.execute("DELETE FROM moods WHERE id=?", (record_id,))
+    db.commit()
+    return jsonify({"success": True, "id": record_id}), 200
+
+
 # ── Sleep ─────────────────────────────────────────────────────────────────────
 def parse_time(t):
     for fmt in ("%H:%M", "%I:%M %p", "%I:%M%p"):
@@ -1218,6 +1253,52 @@ def parse_time(t):
             return datetime.datetime.strptime(t, fmt)
         except ValueError:
             continue
+    return None
+
+
+def build_sleep_interval(record_date, bedtime_str, wakeup_str):
+    """Build an actual datetime interval anchored to the record's calendar date."""
+    bedtime = parse_time(bedtime_str)
+    wakeup = parse_time(wakeup_str)
+    if not bedtime or not wakeup:
+        return None, None
+
+    start = datetime.datetime.combine(record_date, bedtime.time())
+    end = datetime.datetime.combine(record_date, wakeup.time())
+    if end <= start:
+        end += datetime.timedelta(days=1)
+
+    return start, end
+
+
+def sleep_intervals_overlap(start_a, end_a, start_b, end_b):
+    """Intervals that only touch at an endpoint are allowed; actual overlap is not."""
+    return start_a < end_b and start_b < end_a
+
+
+def find_sleep_overlap(db, record_date, bedtime_str, wakeup_str, exclude_id=None):
+    """Return the first existing record whose actual interval overlaps the candidate."""
+    start, end = build_sleep_interval(record_date, bedtime_str, wakeup_str)
+    if start is None or end is None:
+        return None
+
+    rows = db.execute("SELECT * FROM sleep_records ORDER BY id ASC").fetchall()
+    for row in rows:
+        if exclude_id is not None and row["id"] == exclude_id:
+            continue
+
+        existing_date = _date_from_timestamp(row["date"])
+        if existing_date is None:
+            continue
+
+        existing_start, existing_end = build_sleep_interval(
+            existing_date, row["bedtime"], row["wakeup"]
+        )
+        if existing_start and existing_end and sleep_intervals_overlap(
+            start, end, existing_start, existing_end
+        ):
+            return row
+
     return None
 
 
@@ -1240,30 +1321,104 @@ def get_sleep():
     return jsonify({"records": rows_to_list(rows)})
 
 
-@app.route("/sleep", methods=["POST"])
+@app.route("/sleep", methods=["POST", "PATCH"])
 def save_sleep():
     data = request.get_json() or {}
     bedtime_str = (data.get("bedtime") or "").strip()
     wakeup_str  = (data.get("wakeup") or "").strip()
+
     if not bedtime_str or not wakeup_str:
-        return jsonify({"error": "Both times required"}), 400
+        return jsonify({"error": "Both times are required."}), 400
+
     bedtime = parse_time(bedtime_str)
-    wakeup  = parse_time(wakeup_str)
+    wakeup = parse_time(wakeup_str)
     if not bedtime or not wakeup:
-        return jsonify({"error": "Invalid time format. Use HH:MM"}), 400
-    if wakeup <= bedtime:
-        wakeup += datetime.timedelta(days=1)
-    hours   = round((wakeup - bedtime).total_seconds() / 3600, 1)
-    insight = sleep_insight(hours)
-    date, _, ts = now_parts()
+        return jsonify({"error": "Invalid time format. Use HH:MM."}), 400
+    if bedtime_str == wakeup_str:
+        return jsonify({"error": "Bedtime and wake-up time must be different."}), 400
+
+    record_id = data.get("id")
+    if request.method == "PATCH":
+        try:
+            record_id = int(record_id)
+        except (TypeError, ValueError):
+            return jsonify({"error": "A valid sleep record id is required."}), 400
+        if record_id <= 0:
+            return jsonify({"error": "A valid sleep record id is required."}), 400
+
     db = get_db()
+
+    if request.method == "PATCH":
+        existing = db.execute(
+            "SELECT * FROM sleep_records WHERE id=?", (record_id,)
+        ).fetchone()
+        if not existing:
+            return jsonify({"error": "Sleep record not found."}), 404
+
+        record_date = _date_from_timestamp(existing["date"])
+        if record_date is None:
+            return jsonify({"error": "The existing sleep record has an invalid date."}), 400
+    else:
+        record_date = datetime.date.today()
+
+    overlap = find_sleep_overlap(
+        db,
+        record_date,
+        bedtime_str,
+        wakeup_str,
+        exclude_id=record_id if request.method == "PATCH" else None,
+    )
+    if overlap:
+        return jsonify({
+            "error": "This sleep interval overlaps an existing sleep record.",
+            "conflict_id": overlap["id"],
+        }), 409
+
+    start, end = build_sleep_interval(record_date, bedtime_str, wakeup_str)
+    hours = round((end - start).total_seconds() / 3600, 1)
+    insight = sleep_insight(hours)
+    _, _, ts = now_parts()
+
+    if request.method == "PATCH":
+        db.execute(
+            """
+            UPDATE sleep_records
+            SET bedtime=?, wakeup=?, duration_hours=?, insight=?
+            WHERE id=?
+            """,
+            (bedtime_str, wakeup_str, hours, insight, record_id),
+        )
+        db.commit()
+        record = row_to_dict(
+            db.execute(
+                "SELECT * FROM sleep_records WHERE id=?", (record_id,)
+            ).fetchone()
+        )
+        return jsonify({"record": record}), 200
+
     cur = db.execute(
         "INSERT INTO sleep_records (bedtime, wakeup, duration_hours, insight, date, timestamp) VALUES (?,?,?,?,?,?)",
-        (bedtime_str, wakeup_str, hours, insight, date, ts)
+        (bedtime_str, wakeup_str, hours, insight, record_date.isoformat(), ts)
     )
     db.commit()
-    record = row_to_dict(db.execute("SELECT * FROM sleep_records WHERE id=?", (cur.lastrowid,)).fetchone())
+    record = row_to_dict(
+        db.execute("SELECT * FROM sleep_records WHERE id=?", (cur.lastrowid,)).fetchone()
+    )
     return jsonify({"record": record}), 201
+
+
+@app.route("/sleep/<int:record_id>", methods=["DELETE"])
+def delete_sleep(record_id):
+    db = get_db()
+    existing = db.execute(
+        "SELECT id FROM sleep_records WHERE id=?", (record_id,)
+    ).fetchone()
+    if not existing:
+        return jsonify({"error": "Sleep record not found."}), 404
+
+    db.execute("DELETE FROM sleep_records WHERE id=?", (record_id,))
+    db.commit()
+    return jsonify({"success": True, "id": record_id}), 200
 
 
 # ── Stats ─────────────────────────────────────────────────────────────────────

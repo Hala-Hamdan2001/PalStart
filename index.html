@@ -36,6 +36,8 @@
       --text-primary:   #1a3a2e;
       --text-secondary: #4b7063;
       --text-muted:     #8eada6;
+      --toast-bg:       #1a3a2e;
+      --toast-text:     #ffffff;
 
       /* Shadows */
       --shadow-sm:  0 1px 3px rgba(52,211,153,.08), 0 1px 2px rgba(52,211,153,.05);
@@ -78,6 +80,8 @@
       --lavender-light: #1e1a3a;
       --peach-light:    #3a1a1a;
       --amber-light:    #3a2e0a;
+      --toast-bg:       #e2f5ee;
+      --toast-text:     #0f1f18;
     }
 
     html, body {
@@ -957,6 +961,19 @@
       font-size: 10px; font-weight: 700;
       padding: 2px 8px; border-radius: 10px; flex-shrink: 0;
     }
+    .mood-cancel-edit {
+      width: 100%;
+      margin-top: 8px;
+      padding: 9px 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: var(--surface);
+      color: var(--text-secondary);
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      font-family: inherit;
+    }
 
     /* ═══════════════════════════════════════════════
        SLEEP SCREEN
@@ -982,6 +999,31 @@
     }
     .sleep-time-input:focus { border-color: rgba(255,255,255,.55); background: rgba(255,255,255,.2); }
     .sleep-time-input::placeholder { color: rgba(255,255,255,.4); font-weight: 400; }
+    .sleep-form-error {
+      display: none;
+      margin-top: 10px;
+      padding: 9px 11px;
+      border-radius: var(--radius-sm);
+      background: rgba(254,226,226,.16);
+      border: 1px solid rgba(254,226,226,.4);
+      color: #fff;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .sleep-form-error.visible { display: block; }
+    .sleep-cancel-edit {
+      width: 100%;
+      margin-top: 8px;
+      padding: 9px 12px;
+      border: 1px solid rgba(255,255,255,.3);
+      border-radius: var(--radius-sm);
+      background: transparent;
+      color: #fff;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      font-family: inherit;
+    }
 
     #sleep-result {
       margin: 12px 16px 0; border-radius: var(--radius-md); padding: 16px;
@@ -1009,6 +1051,23 @@
     .sleep-rec-hours { font-size: 16px; font-weight: 700; color: var(--text-primary); }
     .sleep-rec-times { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
     .sleep-rec-date { font-size: 11px; color: var(--text-muted); text-align: end; }
+    .sleep-rec-actions { display: flex; gap: 5px; flex-shrink: 0; }
+    .sleep-rec-btn {
+      padding: 5px 8px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text-secondary);
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .sleep-rec-btn.delete {
+      background: var(--peach-light);
+      border-color: var(--peach);
+      color: #b91c1c;
+    }
 
     /* ═══════════════════════════════════════════════
        SETTINGS SCREEN
@@ -1106,8 +1165,8 @@
       position: fixed;
       bottom: calc(var(--nav-h) + 16px);
       left: 50%; transform: translateX(-50%) translateY(10px);
-      background: var(--text-primary);
-      color: #fff;
+      background: var(--toast-bg);
+      color: var(--toast-text);
       padding: 10px 20px;
       border-radius: 20px;
       font-size: 13px; font-weight: 500;
@@ -1331,7 +1390,7 @@
       <!-- MOOD -->
       <div class="screen" id="screen-mood">
         <div id="mood-today-banner"></div>
-         <div class="section-title" data-i18n="mood_question">Log today's signal</div>
+         <div class="section-title" id="mood-form-title" data-i18n="mood_question">Log today's signal</div>
         <div class="mood-grid">
           <div class="mood-option" data-mood="happy" onclick="selectMood('happy')">
             <div class="mood-emoji">😊</div>
@@ -1356,6 +1415,7 @@
              placeholder="Add context about this signal or what influenced it... (optional)"></textarea>
         </div>
          <button class="btn-primary" id="save-mood-btn" onclick="saveMood()" disabled data-i18n="save_mood">Save Today's Signal</button>
+         <button class="mood-cancel-edit" id="mood-cancel-edit-btn" onclick="cancelMoodEdit()" type="button" data-i18n="mood_cancel_edit" hidden>Cancel Edit</button>
          <div class="section-title" data-i18n="mood_history_title">Recent Signals</div>
         <div id="mood-history"></div>
       </div>
@@ -1374,7 +1434,9 @@
               <input class="sleep-time-input" id="sleep-wakeup" type="time" placeholder="07:00" />
             </div>
           </div>
-          <button class="btn-primary" onclick="saveSleep()" style="margin:14px 0 0;width:100%" data-i18n="sleep_save_btn">Calculate & Save</button>
+          <div id="sleep-form-error" class="sleep-form-error" role="alert" aria-live="polite"></div>
+          <button class="btn-primary" id="sleep-save-btn" onclick="saveSleep()" style="margin:14px 0 0;width:100%" data-i18n="sleep_save_btn">Calculate & Save</button>
+          <button class="sleep-cancel-edit" id="sleep-cancel-edit-btn" onclick="cancelSleepEdit()" type="button" data-i18n="sleep_cancel_edit" hidden>Cancel Edit</button>
         </div>
         <div id="sleep-result">
           <div class="sleep-duration-big" id="sleep-hours-display">—</div>
@@ -1538,11 +1600,38 @@ const TRANSLATIONS = {
     today_mood_label:    "Today's signal",
     today_badge:         "Today",
     mood_edit_hint:      "✎ You can update today's signal any time",
+    mood_edit_title:     "✎ Edit Signal",
+    mood_update_btn:     "Update Signal",
+    mood_cancel_edit:    "Cancel Edit",
+    mood_not_found_error: "This signal no longer exists.",
+    mood_save_error:     "Could not save signal.",
+    mood_delete_error:   "Could not delete signal.",
+    mood_delete_confirm: "Delete this signal?",
+    mood_edit:            "Edit",
+    mood_delete:           "Delete",
+    mood_empty_state:    "No daily signals yet. Log one to start seeing patterns!",
     sleep_log_title:     "🌙 Log Your Recovery",
+    sleep_edit_title:    "🌙 Edit Your Recovery",
     bedtime:             "Bedtime", wakeup:  "Wake up",
     sleep_save_btn:      "Calculate & Save",
+    sleep_update_btn:    "Update Record",
+    sleep_cancel_edit:   "Cancel Edit",
+    sleep_invalid_error: "Please enter a valid bedtime and wake-up time.",
+    sleep_overlap_error: "This sleep interval overlaps an existing sleep record.",
+    sleep_not_found_error: "This sleep record no longer exists.",
+    sleep_delete_confirm: "Delete this sleep record?",
+    sleep_edit:           "Edit",
+    sleep_delete:         "Delete",
+    sleep_save_error:    "Could not save sleep data.",
+    sleep_delete_error:  "Could not delete sleep data.",
+    sleep_empty_state:   "No recovery records yet. Log your first night!",
     hours_of_sleep:      "hours of recovery sleep",
     sleep_history_title: "Recovery History",
+    task_save_error:     "Could not save task.",
+    toast_insight_deleted: "Insight session deleted",
+    voice_not_supported: "Voice input not supported in this browser",
+    voice_capture_error: "Could not capture voice",
+    voice_listening:     "Listening...",
     settings_appearance: "Appearance",
     dark_mode:           "Dark Mode", dark_mode_sub: "Easy on the eyes at night",
     settings_language:   "Language",
@@ -1552,7 +1641,10 @@ const TRANSLATIONS = {
     privacy:             "Privacy First", privacy_sub: "Your data stays on your device",
     toast_mood_saved:    "Signal saved!",
     toast_mood_updated:  "Signal updated!",
+    toast_mood_deleted:  "Signal deleted!",
     toast_sleep_saved:   "Recovery logged!",
+    toast_sleep_updated: "Recovery updated!",
+    toast_sleep_deleted: "Recovery record deleted!",
   },
   ar: {
     app_subtitle:        "رفيقك الذكي لفهم سلوكك",
@@ -1601,11 +1693,38 @@ const TRANSLATIONS = {
     today_mood_label:    "إشارة اليوم",
     today_badge:         "اليوم",
     mood_edit_hint:      "✎ تقدر تحدّث إشارة اليوم في أي وقت",
+    mood_edit_title:     "✎ عدّل الإشارة",
+    mood_update_btn:     "تحديث الإشارة",
+    mood_cancel_edit:    "إلغاء التعديل",
+    mood_not_found_error: "هذه الإشارة لم تعد موجودة.",
+    mood_save_error:     "تعذّر حفظ الإشارة.",
+    mood_delete_error:   "تعذّر حذف الإشارة.",
+    mood_delete_confirm: "هل تريد حذف هذه الإشارة؟",
+    mood_edit:            "تعديل",
+    mood_delete:           "حذف",
+    mood_empty_state:    "ما في إشارات يومية بعد. سجّل واحدة لتبدأ تلاحظ الأنماط!",
     sleep_log_title:     "🌙 سجّل تعافيك",
+    sleep_edit_title:    "🌙 عدّل تعافيك",
     bedtime:             "وقت النوم", wakeup: "وقت الصحيان",
     sleep_save_btn:      "احسب واحفظ",
+    sleep_update_btn:    "تحديث السجل",
+    sleep_cancel_edit:   "إلغاء التعديل",
+    sleep_invalid_error: "الرجاء إدخال وقت نوم واستيقاظ صحيحين.",
+    sleep_overlap_error: "هذه الفترة تتداخل مع سجل نوم موجود.",
+    sleep_not_found_error: "هذا السجل لم يعد موجوداً.",
+    sleep_delete_confirm: "هل تريد حذف سجل النوم هذا؟",
+    sleep_edit:           "تعديل",
+    sleep_delete:         "حذف",
+    sleep_save_error:    "تعذّر حفظ بيانات النوم.",
+    sleep_delete_error:  "تعذّر حذف بيانات النوم.",
+    sleep_empty_state:   "ما في سجلات تعافٍ بعد. سجّل ليلتك الأولى!",
     hours_of_sleep:      "ساعات نوم للتعافي",
     sleep_history_title: "سجل التعافي",
+    task_save_error:     "تعذّر حفظ المهمة.",
+    toast_insight_deleted: "تم حذف جلسة الرؤى",
+    voice_not_supported: "إدخال الصوت غير مدعوم في هذا المتصفح",
+    voice_capture_error: "تعذّر التقاط الصوت",
+    voice_listening:     "بستمع...",
     settings_appearance: "المظهر",
     dark_mode:           "الوضع الداكن", dark_mode_sub: "مريح للعين في الليل",
     settings_language:   "اللغة",
@@ -1615,7 +1734,10 @@ const TRANSLATIONS = {
     privacy:             "الخصوصية أولاً", privacy_sub: "بياناتك تبقى على جهازك",
     toast_mood_saved:    "حُفظت الإشارة!",
     toast_mood_updated:  "تم تحديث الإشارة!",
+    toast_mood_deleted:  "تم حذف الإشارة!",
     toast_sleep_saved:   "سُجّل التعافي!",
+    toast_sleep_updated: "تم تحديث التعافي!",
+    toast_sleep_deleted: "تم حذف سجل التعافي!",
   }
 };
 
@@ -1850,7 +1972,7 @@ async function addTask() {
     refreshHomeStats();
     loadHomeInsight();
     toast(t('toast_task_added'));
-  } catch(_) { toast('Could not save task'); }
+  } catch(_) { toast(t('task_save_error')); }
 }
 
 async function setTaskStatus(id, status) {
@@ -2120,7 +2242,7 @@ async function deleteConversation(event, id) {
     state.conversations = state.conversations.filter(c => c.id !== id);
     if (state.currentConvId === id) newConversation();
     else renderConvList();
-    toast('Insight session deleted');
+    toast(t('toast_insight_deleted'));
   } catch(_) {}
 }
 
@@ -2255,7 +2377,7 @@ function autoResize(el) {
 function toggleMic() {
   const btn = document.getElementById('mic-btn');
   if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-    toast('Voice input not supported in this browser');
+    toast(t('voice_not_supported'));
     return;
   }
   if (state.isRecording) {
@@ -2275,18 +2397,36 @@ function toggleMic() {
     if (btn) { btn.classList.remove('recording'); btn.textContent = '🎤'; }
   };
   const stopRec = () => { state.isRecording = false; if (btn) { btn.classList.remove('recording'); btn.textContent = '🎤'; } };
-  rec.onerror = () => { toast('Could not capture voice'); stopRec(); };
+  rec.onerror = () => { toast(t('voice_capture_error')); stopRec(); };
   rec.onend   = stopRec;
   state.recognition = rec;
   rec.start();
   state.isRecording = true;
   if (btn) { btn.classList.add('recording'); btn.textContent = '⏹️'; }
-  toast('Listening...');
+  toast(t('voice_listening'));
 }
 
 /* ═══════════════════════════════════════════════════════════
    MOOD — one entry per day with edit support
 ═══════════════════════════════════════════════════════════ */
+let editingMoodId = null;
+
+function setMoodFormMode(editing) {
+  const title = document.getElementById('mood-form-title');
+  const saveBtn = document.getElementById('save-mood-btn');
+  const cancelBtn = document.getElementById('mood-cancel-edit-btn');
+  if (title) {
+    title.setAttribute('data-i18n', editing ? 'mood_edit_title' : 'mood_question');
+    title.textContent = t(editing ? 'mood_edit_title' : 'mood_question');
+  }
+  if (saveBtn) saveBtn.setAttribute('data-i18n', editing ? 'mood_update_btn' : 'save_mood');
+  if (saveBtn) saveBtn.textContent = t(editing ? 'mood_update_btn' : 'save_mood');
+  if (cancelBtn) {
+    cancelBtn.hidden = !editing;
+    cancelBtn.textContent = t('mood_cancel_edit');
+  }
+}
+
 function selectMood(m) {
   state.selectedMood = m;
   document.querySelectorAll('.mood-option').forEach(el => el.classList.remove('selected'));
@@ -2295,36 +2435,105 @@ function selectMood(m) {
   if (saveBtn) saveBtn.disabled = false;
 }
 
+function cancelMoodEdit() {
+  editingMoodId = null;
+  state.selectedMood = null;
+  document.querySelectorAll('.mood-option').forEach(el => el.classList.remove('selected'));
+  const noteEl = document.getElementById('mood-note');
+  if (noteEl) noteEl.value = '';
+  const saveBtn = document.getElementById('save-mood-btn');
+  if (saveBtn) saveBtn.disabled = true;
+  setMoodFormMode(false);
+}
+
 async function saveMood() {
   if (!state.selectedMood) return;
   const note = (document.getElementById('mood-note')?.value || '').trim();
   const saveBtn = document.getElementById('save-mood-btn');
   if (saveBtn) saveBtn.disabled = true;
+  const isEditing = editingMoodId !== null;
   try {
-    const r = await fetch(`${API_BASE_URL}mood`, {
-      method: 'POST',
+    const r = await fetch(`${API_BASE_URL}mood${isEditing ? '/' + editingMoodId : ''}`, {
+      method: isEditing ? 'PATCH' : 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ mood: state.selectedMood, note })
     });
     const d = await r.json();
 
-    // Upsert in local state
-    const today = todayStr();
-    const idx   = state.moods.findIndex(m => m.date === today);
-    if (idx !== -1) state.moods[idx] = d.entry;
-    else             state.moods.unshift(d.entry);
+    if (!r.ok) {
+      toast(r.status === 404 ? t('mood_not_found_error') : (d.error || t('mood_save_error')));
+      if (saveBtn) saveBtn.disabled = false;
+      return;
+    }
+
+    if (isEditing) {
+      const idx = state.moods.findIndex(m => Number(m.id) === editingMoodId);
+      if (idx !== -1) state.moods[idx] = d.entry;
+    } else {
+      const today = todayStr();
+      const idx   = state.moods.findIndex(m => m.date === today);
+      if (idx !== -1) state.moods[idx] = d.entry;
+      else             state.moods.unshift(d.entry);
+    }
 
     document.getElementById('mood-note').value = '';
     document.querySelectorAll('.mood-option').forEach(el => el.classList.remove('selected'));
     state.selectedMood = null;
+    editingMoodId = null;
+    setMoodFormMode(false);
 
-    toast(d.updated ? t('toast_mood_updated') : t('toast_mood_saved'));
+    toast(isEditing ? t('toast_mood_updated') : (d.updated ? t('toast_mood_updated') : t('toast_mood_saved')));
     loadMoodHistory();
     refreshHomeStats();
     loadHomeInsight();
     updateMoodTodayBanner();
-  } catch(_) { toast('Could not save mood'); }
+  } catch(_) { toast(t('mood_save_error')); }
   if (saveBtn) saveBtn.disabled = true;
+}
+
+function editMood(id) {
+  const rec = state.moods.find(m => Number(m.id) === Number(id));
+  if (!rec) {
+    toast(t('mood_not_found_error'));
+    return;
+  }
+
+  editingMoodId = Number(id);
+  state.selectedMood = rec.mood;
+  document.querySelectorAll('.mood-option').forEach(el => el.classList.remove('selected'));
+  document.querySelector(`.mood-option[data-mood="${rec.mood}"]`)?.classList.add('selected');
+  const noteEl = document.getElementById('mood-note');
+  if (noteEl) noteEl.value = rec.note || '';
+  const saveBtn = document.getElementById('save-mood-btn');
+  if (saveBtn) saveBtn.disabled = false;
+  setMoodFormMode(true);
+
+  const screen = document.getElementById('screen-mood');
+  if (screen) screen.scrollTop = 0;
+}
+
+async function deleteMood(id) {
+  if (!confirm(t('mood_delete_confirm'))) return;
+
+  try {
+    const r = await fetch(`${API_BASE_URL}mood/${encodeURIComponent(id)}`, {
+      method: 'DELETE'
+    });
+    const d = await r.json();
+
+    if (!r.ok) {
+      toast(r.status === 404 ? t('mood_not_found_error') : (d.error || t('mood_delete_error')));
+      return;
+    }
+
+    if (editingMoodId === Number(id)) cancelMoodEdit();
+    toast(t('toast_mood_deleted'));
+    await loadMoodHistory();
+    refreshHomeStats();
+    await loadHomeInsight();
+  } catch(_) {
+    toast(t('mood_delete_error'));
+  }
 }
 
 async function loadMoodHistory() {
@@ -2377,7 +2586,7 @@ function renderMoodHistory() {
   };
   const today = todayStr();
   if (!state.moods.length) {
-    el.innerHTML = `<div class="empty-state"><div class="empty-icon">🌡️</div><p>No daily signals yet. Log one to start seeing patterns!</p></div>`;
+    el.innerHTML = `<div class="empty-state"><div class="empty-icon">🌡️</div><p>${t('mood_empty_state')}</p></div>`;
     return;
   }
   el.innerHTML = state.moods.map(m => `
@@ -2389,39 +2598,159 @@ function renderMoodHistory() {
         ${m.note ? `<div class="mood-hist-note">"${escHtml(m.note)}"</div>` : ''}
       </div>
       ${m.date === today ? `<span class="mood-hist-today-badge">${t('today_badge')}</span>` : ''}
+      <div class="sleep-rec-actions">
+        <button class="sleep-rec-btn" type="button" onclick="editMood(${Number(m.id)})">${t('mood_edit')}</button>
+        <button class="sleep-rec-btn delete" type="button" onclick="deleteMood(${Number(m.id)})">${t('mood_delete')}</button>
+      </div>
     </div>`).join('');
 }
 
 /* ═══════════════════════════════════════════════════════════
    SLEEP
 ═══════════════════════════════════════════════════════════ */
+let editingSleepId = null;
+
+function setSleepFormError(message) {
+  const el = document.getElementById('sleep-form-error');
+  if (!el) return;
+  el.textContent = message || '';
+  el.classList.toggle('visible', Boolean(message));
+}
+
+function setSleepFormMode(editing) {
+  const title = document.querySelector('.sleep-form-title');
+  const saveBtn = document.getElementById('sleep-save-btn');
+  const cancelBtn = document.getElementById('sleep-cancel-edit-btn');
+  if (title) {
+    title.setAttribute('data-i18n', editing ? 'sleep_edit_title' : 'sleep_log_title');
+    title.textContent = t(editing ? 'sleep_edit_title' : 'sleep_log_title');
+  }
+  if (saveBtn) saveBtn.setAttribute('data-i18n', editing ? 'sleep_update_btn' : 'sleep_save_btn');
+  if (saveBtn) saveBtn.textContent = t(editing ? 'sleep_update_btn' : 'sleep_save_btn');
+  if (cancelBtn) {
+    cancelBtn.hidden = !editing;
+    cancelBtn.textContent = t('sleep_cancel_edit');
+  }
+}
+
+function clearSleepForm() {
+  const bedtime = document.getElementById('sleep-bedtime');
+  const wakeup = document.getElementById('sleep-wakeup');
+  if (bedtime) bedtime.value = '';
+  if (wakeup) wakeup.value = '';
+  editingSleepId = null;
+  setSleepFormError('');
+  setSleepFormMode(false);
+}
+
+function cancelSleepEdit() {
+  clearSleepForm();
+}
+
+function showSleepResult(rec) {
+  const hoursEl = document.getElementById('sleep-hours-display');
+  const insightEl = document.getElementById('sleep-insight-text');
+  const resultEl = document.getElementById('sleep-result');
+  if (hoursEl) hoursEl.textContent = rec.duration_hours;
+  if (insightEl) insightEl.textContent = rec.insight;
+  if (resultEl) resultEl.classList.add('visible');
+}
+
 async function saveSleep() {
   const bedtime = document.getElementById('sleep-bedtime')?.value;
   const wakeup  = document.getElementById('sleep-wakeup')?.value;
-  if (!bedtime || !wakeup) { toast('Enter both times'); return; }
+  setSleepFormError('');
+
+  if (!bedtime || !wakeup) {
+    setSleepFormError(t('sleep_invalid_error'));
+    return;
+  }
+
+  const isEditing = editingSleepId !== null;
   try {
     const r = await fetch(`${API_BASE_URL}sleep`, {
-      method: 'POST',
+      method: isEditing ? 'PATCH' : 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ bedtime, wakeup })
+      body: JSON.stringify(
+        isEditing
+          ? { id: editingSleepId, bedtime, wakeup }
+          : { bedtime, wakeup }
+      )
     });
     const d = await r.json();
-    const rec = d.record;
-    state.sleep.unshift(rec);
-    document.getElementById('sleep-hours-display').textContent = rec.duration_hours;
-    document.getElementById('sleep-insight-text').textContent  = rec.insight;
-    document.getElementById('sleep-result').classList.add('visible');
-    toast(t('toast_sleep_saved'));
-    loadSleepHistory();
+
+    if (!r.ok) {
+      setSleepFormError(
+        r.status === 409 ? t('sleep_overlap_error')
+          : r.status === 404 ? t('sleep_not_found_error')
+          : d.error || t('sleep_invalid_error')
+      );
+      return;
+    }
+
+    const wasEditing = isEditing;
+    showSleepResult(d.record);
+    clearSleepForm();
+    toast(t(wasEditing ? 'toast_sleep_updated' : 'toast_sleep_saved'));
+    await loadSleepHistory();
     refreshHomeStats();
-    loadHomeInsight();
-  } catch(_) { toast('Could not save sleep data'); }
+    await loadHomeInsight();
+  } catch(_) {
+    setSleepFormError(t('sleep_save_error'));
+  }
+}
+
+function editSleep(id) {
+  const rec = state.sleep.find(r => Number(r.id) === Number(id));
+  if (!rec) {
+    setSleepFormError(t('sleep_not_found_error'));
+    return;
+  }
+
+  editingSleepId = Number(id);
+  const bedtime = document.getElementById('sleep-bedtime');
+  const wakeup = document.getElementById('sleep-wakeup');
+  if (bedtime) bedtime.value = rec.bedtime;
+  if (wakeup) wakeup.value = rec.wakeup;
+  setSleepFormError('');
+  setSleepFormMode(true);
+
+  const screen = document.getElementById('screen-sleep');
+  if (screen) screen.scrollTop = 0;
+}
+
+async function deleteSleep(id) {
+  if (!confirm(t('sleep_delete_confirm'))) return;
+  setSleepFormError('');
+
+  try {
+    const r = await fetch(`${API_BASE_URL}sleep/${encodeURIComponent(id)}`, {
+      method: 'DELETE'
+    });
+    const d = await r.json();
+
+    if (!r.ok) {
+      setSleepFormError(
+        r.status === 404 ? t('sleep_not_found_error') : (d.error || t('sleep_delete_error'))
+      );
+      return;
+    }
+
+    if (editingSleepId === Number(id)) clearSleepForm();
+    toast(t('toast_sleep_deleted'));
+    await loadSleepHistory();
+    refreshHomeStats();
+    await loadHomeInsight();
+  } catch(_) {
+    setSleepFormError(t('sleep_delete_error'));
+  }
 }
 
 async function loadSleepHistory() {
   try {
     const r = await fetch(`${API_BASE_URL}sleep`);
     const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Could not load sleep data.');
     state.sleep = d.records || [];
     renderSleepHistory();
   } catch(_) {}
@@ -2431,7 +2760,7 @@ function renderSleepHistory() {
   const el = document.getElementById('sleep-history');
   if (!el) return;
   if (!state.sleep.length) {
-    el.innerHTML = `<div class="empty-state"><div class="empty-icon">🌙</div><p>No recovery records yet. Log your first night!</p></div>`;
+    el.innerHTML = `<div class="empty-state"><div class="empty-icon">🌙</div><p>${t('sleep_empty_state')}</p></div>`;
     return;
   }
   el.innerHTML = state.sleep.map(r => `
@@ -2439,9 +2768,13 @@ function renderSleepHistory() {
       <div class="sleep-rec-icon">🌙</div>
       <div class="sleep-rec-info">
         <div class="sleep-rec-hours">${r.duration_hours}h</div>
-        <div class="sleep-rec-times">${r.bedtime} → ${r.wakeup}</div>
+        <div class="sleep-rec-times">${escHtml(r.bedtime)} → ${escHtml(r.wakeup)}</div>
       </div>
-      <div class="sleep-rec-date">${r.date}</div>
+      <div class="sleep-rec-date">${escHtml(r.date)}</div>
+      <div class="sleep-rec-actions">
+        <button class="sleep-rec-btn" type="button" onclick="editSleep(${Number(r.id)})" data-i18n="sleep_edit">${t('sleep_edit')}</button>
+        <button class="sleep-rec-btn delete" type="button" onclick="deleteSleep(${Number(r.id)})" data-i18n="sleep_delete">${t('sleep_delete')}</button>
+      </div>
     </div>`).join('');
 }
 
