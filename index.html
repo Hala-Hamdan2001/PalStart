@@ -896,7 +896,7 @@
       display: grid; grid-template-columns: 1fr 1fr;
       gap: 10px; padding: 8px 16px 0;
     }
-    @media (min-width: 600px) { .mood-grid { grid-template-columns: repeat(4, 1fr); } }
+    @media (min-width: 600px) { .mood-grid { grid-template-columns: repeat(5, 1fr); } }
 
     .mood-option {
       background: var(--white);
@@ -909,6 +909,7 @@
     .mood-option:active { transform: scale(.96); }
     .mood-option.selected { border-width: 2px; }
     .mood-option[data-mood="happy"].selected   { border-color: #f59e0b; background: var(--amber-light); }
+    .mood-option[data-mood="okay"].selected    { border-color: var(--mint-dark); background: var(--mint-light); }
     .mood-option[data-mood="neutral"].selected { border-color: var(--teal); background: var(--teal-light); }
     .mood-option[data-mood="sad"].selected     { border-color: var(--lavender-mid); background: var(--lavender-light); }
     .mood-option[data-mood="stressed"].selected{ border-color: var(--peach); background: var(--peach-light); }
@@ -1258,10 +1259,11 @@
           <div class="hero-sub" data-i18n="hero_sub">Pilo is here to help you sort through it.</div>
           <div id="hero-today-mood-wrap"></div>
           <div class="hero-mood-row">
-            <div class="hero-mood-chip" onclick="quickMood('happy')">😊 <span data-i18n="mood_happy">Great</span></div>
-            <div class="hero-mood-chip" onclick="quickMood('neutral')">😐 <span data-i18n="mood_okay">Okay</span></div>
-            <div class="hero-mood-chip" onclick="quickMood('sad')">😞 <span data-i18n="mood_low">Low</span></div>
-            <div class="hero-mood-chip" onclick="quickMood('stressed')">😤 <span data-i18n="mood_stressed">Stressed</span></div>
+            <div class="hero-mood-chip" onclick="quickMood('happy')">😊 <span data-i18n="mood_happy_label">Happy</span></div>
+            <div class="hero-mood-chip" onclick="quickMood('okay')">🙂 <span data-i18n="mood_okay_label">Okay</span></div>
+            <div class="hero-mood-chip" onclick="quickMood('neutral')">😐 <span data-i18n="mood_neutral_label">Neutral</span></div>
+            <div class="hero-mood-chip" onclick="quickMood('sad')">😞 <span data-i18n="mood_sad_label">Sad</span></div>
+            <div class="hero-mood-chip" onclick="quickMood('stressed')">😤 <span data-i18n="mood_stressed_label">Stressed</span></div>
           </div>
         </div>
 
@@ -1315,10 +1317,10 @@
             <span data-i18n="home_vent_sub">Share what keeps repeating and connect the behavior to a useful next step.</span>
           </div>
         </div>
-        <div class="card" style="cursor:pointer" onclick="startChat('Help me build a focused plan for today without burning out')">
+        <div class="card" style="cursor:pointer" onclick="startChat('Help me build a focused plan for today that fits my energy and recovery')">
           <div style="font-size:13px;color:var(--text-secondary);line-height:1.5">
             <strong style="color:var(--text-primary)" data-i18n="home_focus_title">Protect your focus</strong><br>
-            <span data-i18n="home_focus_sub">Build a practical rhythm for productivity, recovery, and burnout prevention.</span>
+            <span data-i18n="home_focus_sub">Build a practical rhythm that balances productivity, recovery, and focus.</span>
           </div>
         </div>
       </div>
@@ -1370,7 +1372,7 @@
                  <div class="starter-chip" onclick="sendStarter(this)" data-i18n="starter1">Spot a pattern</div>
                  <div class="starter-chip" onclick="sendStarter(this)" data-i18n="starter2">Help me focus</div>
                  <div class="starter-chip" onclick="sendStarter(this)" data-i18n="starter3">Review my recovery</div>
-                 <div class="starter-chip" onclick="sendStarter(this)" data-i18n="starter4">Check burnout risk</div>
+                 <div class="starter-chip" onclick="sendStarter(this)" data-i18n="starter4">Explore my patterns</div>
                  <div class="starter-chip" onclick="sendStarter(this)" data-i18n="starter5">Review my habits</div>
                  <div class="starter-chip" onclick="sendStarter(this)" data-i18n="starter6">Show my insights</div>
               </div>
@@ -1396,6 +1398,10 @@
           <div class="mood-option" data-mood="happy" onclick="selectMood('happy')">
             <div class="mood-emoji">😊</div>
             <div class="mood-label" data-i18n="mood_happy_label">Happy</div>
+          </div>
+          <div class="mood-option" data-mood="okay" onclick="selectMood('okay')">
+            <div class="mood-emoji">🙂</div>
+            <div class="mood-label" data-i18n="mood_okay_label">Okay</div>
           </div>
           <div class="mood-option" data-mood="neutral" onclick="selectMood('neutral')">
             <div class="mood-emoji">😐</div>
@@ -1564,7 +1570,6 @@ const TRANSLATIONS = {
     insight_loading:     "Looking at your recent context...",
     insight_empty:       "Log a few signals, recovery records, or focus tasks to unlock a personalized insight.",
     insight_updated:     "Personalized from your recent activity",
-    mood_happy:          "Great", mood_okay: "Okay", mood_low: "Low", mood_stressed: "Stressed",
     stat_tasks:          "Tracked Tasks", stat_active: "Active", stat_done: "Done", stat_sleep: "Last Recovery",
     quick_access:        "Quick Access",
     qcard_chat:          "Talk to Pilo", qcard_chat_sub: "Explore patterns and next steps",
@@ -1575,7 +1580,7 @@ const TRANSLATIONS = {
     home_vent_title:     "Spot a pattern",
     home_vent_sub:       "Share what keeps repeating and connect the behavior to a useful next step.",
     home_focus_title:    "Protect your focus",
-    home_focus_sub:      "Build a practical rhythm for productivity, recovery, and burnout prevention.",
+    home_focus_sub:      "Build a practical rhythm that balances productivity, recovery, and focus.",
     task_placeholder:    "Add a focus task or habit...",
     filter_all:          "All", filter_todo: "Todo", filter_active: "Active", filter_done: "Done",
     btn_start:           "▶ Start", btn_complete: "✓ Done", btn_undo: "↩ Undo", btn_edit: "✎ Edit", btn_delete: "✕",
@@ -1592,9 +1597,9 @@ const TRANSLATIONS = {
     chat_context_hint:   "Personalized from your recent activity",
     chat_placeholder:    "Tell me what's on your mind...",
     starter1: "Spot a pattern", starter2: "Help me focus", starter3: "Review my recovery",
-    starter4: "Check burnout risk", starter5: "Review my habits", starter6: "Show my insights",
+    starter4: "Explore my patterns", starter5: "Review my habits", starter6: "Show my insights",
     mood_question:       "Log today's signal",
-    mood_happy_label:    "Happy", mood_neutral_label: "Neutral",
+    mood_happy_label:    "Happy", mood_okay_label: "Okay", mood_neutral_label: "Neutral",
     mood_sad_label:      "Sad",   mood_stressed_label: "Stressed",
     mood_note_placeholder: "Add context about this signal or what influenced it... (optional)",
     save_mood:           "Save Today's Signal",
@@ -1658,7 +1663,6 @@ const TRANSLATIONS = {
     insight_loading:     "بيلو يطّلع على سياقك الأخير...",
     insight_empty:       "سجّل بعض الإشارات أو التعافي أو مهام التركيز لتحصل على رؤية شخصية.",
     insight_updated:     "مخصّصة بناءً على نشاطك الأخير",
-    mood_happy:          "زين", mood_okay: "ماشي", mood_low: "تعبان", mood_stressed: "مضغوط",
     stat_tasks:          "المهام المتابعة", stat_active: "نشط", stat_done: "منجز", stat_sleep: "آخر تعافٍ",
     quick_access:        "وصول سريع",
     qcard_chat:          "تكلم مع بيلو", qcard_chat_sub: "اكتشف الأنماط والخطوات التالية",
@@ -1669,7 +1673,7 @@ const TRANSLATIONS = {
     home_vent_title:     "لاحظ نمطاً متكرراً",
     home_vent_sub:       "شارك ما يتكرر معك واربط السلوك بخطوة عملية مفيدة.",
     home_focus_title:    "احمِ تركيزك",
-    home_focus_sub:      "ابنِ إيقاعاً عملياً للإنتاجية والتعافي والوقاية من الاحتراق.",
+    home_focus_sub:      "ابنِ إيقاعاً عملياً يوازن بين الإنتاجية والتعافي والتركيز.",
     task_placeholder:    "أضف مهمة تركيز أو عادة...",
     filter_all:          "الكل", filter_todo: "قائمة", filter_active: "نشط", filter_done: "منجز",
     btn_start:           "▶ ابدأ", btn_complete: "✓ خلصت", btn_undo: "↩ تراجع", btn_edit: "✎ عدّل", btn_delete: "✕",
@@ -1686,9 +1690,9 @@ const TRANSLATIONS = {
     chat_context_hint:   "مخصّصة بناءً على نشاطك الأخير",
     chat_placeholder:    "قلّي شو يلي في بالك...",
     starter1: "اكتشف نمطاً", starter2: "ساعدني أركّز", starter3: "راجع تعافيّي",
-    starter4: "افحص خطر الاحتراق", starter5: "راجع عاداتي", starter6: "اعرض رؤاي",
+    starter4: "اكتشف أنماطي", starter5: "راجع عاداتي", starter6: "اعرض رؤاي",
     mood_question:       "سجّل إشارة اليوم",
-    mood_happy_label:    "سعيد", mood_neutral_label: "عادي",
+    mood_happy_label:    "سعيد", mood_okay_label: "ماشي", mood_neutral_label: "عادي",
     mood_sad_label:      "حزين", mood_stressed_label: "مضغوط",
     mood_note_placeholder: "أضف سياقاً عن هذه الإشارة أو ما أثر فيها... (اختياري)",
     save_mood:           "احفظ إشارة اليوم",
@@ -1889,8 +1893,18 @@ function refreshHomeStats() {
   set('home-active-count', active);
   set('home-done-count',   done);
 
-  const lastSleep = state.sleep[0];
-  set('home-sleep-stat', lastSleep ? lastSleep.duration_hours + 'h' : '—');
+  // Home recovery stat: sum every session on the most recent recovery day
+  // (individual sleep records are kept separate; only this display value
+  // is aggregated), instead of showing just the latest single session.
+  let sleepDisplay = '—';
+  if (state.sleep.length) {
+    const latestDate = state.sleep[0].date;
+    const dayTotal = state.sleep
+      .filter(s => s.date === latestDate)
+      .reduce((sum, s) => sum + Number(s.duration_hours || 0), 0);
+    sleepDisplay = (Math.round(dayTotal * 10) / 10) + 'h';
+  }
+  set('home-sleep-stat', sleepDisplay);
 
   // Hero today mood badge
   const wrap = document.getElementById('hero-today-mood-wrap');
@@ -1898,9 +1912,10 @@ function refreshHomeStats() {
     const today = todayStr();
     const todayMood = state.moods.find(m => m.date === today);
     if (todayMood) {
-      const emojis = { happy:'😊', neutral:'😐', sad:'😞', stressed:'😤' };
+      const emojis = { happy:'😊', okay:'🙂', neutral:'😐', sad:'😞', stressed:'😤' };
       const labels = {
         happy:   t('mood_happy_label'),
+        okay:    t('mood_okay_label'),
         neutral: t('mood_neutral_label'),
         sad:     t('mood_sad_label'),
         stressed:t('mood_stressed_label')
@@ -2168,6 +2183,18 @@ function formatConvDate(ts) {
     if (diff < 86400000) return Math.floor(diff / 3600000) + 'h ago';
     return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
   } catch(_) { return ''; }
+}
+
+// Derives the user's actual local wall-clock time from a stored UTC
+// timestamp, instead of trusting a raw server-side "HH:MM" string (which
+// reflects the server's own clock, not the viewer's timezone).
+function formatLocalTimeOfDay(ts, fallback) {
+  if (!ts) return fallback || '';
+  try {
+    const d = new Date(ts);
+    if (isNaN(d.getTime())) return fallback || '';
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  } catch(_) { return fallback || ''; }
 }
 
 function newConversation() {
@@ -2555,9 +2582,10 @@ function updateMoodTodayBanner() {
   if (!el) return;
   const today     = todayStr();
   const todayMood = state.moods.find(m => m.date === today);
-  const emojis    = { happy:'😊', neutral:'😐', sad:'😞', stressed:'😤' };
+  const emojis    = { happy:'😊', okay:'🙂', neutral:'😐', sad:'😞', stressed:'😤' };
   const labels    = {
     happy:   t('mood_happy_label'),
+    okay:    t('mood_okay_label'),
     neutral: t('mood_neutral_label'),
     sad:     t('mood_sad_label'),
     stressed:t('mood_stressed_label')
@@ -2581,9 +2609,10 @@ function updateMoodTodayBanner() {
 function renderMoodHistory() {
   const el = document.getElementById('mood-history');
   if (!el) return;
-  const emojis = { happy:'😊', neutral:'😐', sad:'😞', stressed:'😤' };
+  const emojis = { happy:'😊', okay:'🙂', neutral:'😐', sad:'😞', stressed:'😤' };
   const labels = {
     happy:   t('mood_happy_label'),
+    okay:    t('mood_okay_label'),
     neutral: t('mood_neutral_label'),
     sad:     t('mood_sad_label'),
     stressed:t('mood_stressed_label')
@@ -2598,7 +2627,7 @@ function renderMoodHistory() {
       <div class="mood-hist-emoji">${emojis[m.mood]||'❓'}</div>
       <div class="mood-hist-info">
         <div class="mood-hist-label">${labels[m.mood]||m.mood}</div>
-        <div class="mood-hist-date">${m.date} · ${m.time}</div>
+        <div class="mood-hist-date">${m.date} · ${formatLocalTimeOfDay(m.timestamp, m.time)}</div>
         ${m.note ? `<div class="mood-hist-note">"${escHtml(m.note)}"</div>` : ''}
       </div>
       ${m.date === today ? `<span class="mood-hist-today-badge">${t('today_badge')}</span>` : ''}
