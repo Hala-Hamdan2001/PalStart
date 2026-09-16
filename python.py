@@ -220,6 +220,74 @@ def get_daily_sleep_totals(db):
     return {d: round(hours, 1) for d, hours in totals.items()}
 
 
+# A session only counts as a nap when it's BOTH short AND started during
+# daytime hours. Duration alone never decides it — a short session that
+# started at night (e.g. woke up early) still counts as main/overnight sleep.
+NAP_MAX_HOURS = 3.0
+NIGHT_START_HOUR = 20  # 8pm
+NIGHT_END_HOUR = 6     # 6am (exclusive)
+
+
+def classify_sleep_session(bedtime_str, duration_hours):
+    """Deterministic, transparent nap vs. main/overnight classification.
+
+    Uses the session's duration together with its start ("bedtime") period —
+    never duration alone — so a short nighttime sleep is never mislabeled
+    as a nap. Returns "main" or "nap".
+    """
+    try:
+        bed_hour = int(str(bedtime_str).split(":", 1)[0])
+    except (TypeError, ValueError, IndexError):
+        bed_hour = None
+
+    if duration_hours is None or float(duration_hours) > NAP_MAX_HOURS:
+        return "main"
+    if bed_hour is None:
+        return "main"  # can't tell the period; don't guess a nap
+
+    started_at_night = bed_hour >= NIGHT_START_HOUR or bed_hour < NIGHT_END_HOUR
+    return "main" if started_at_night else "nap"
+
+
+def get_daily_main_sleep(db):
+    """Per recovery day, the hours of the MAIN/overnight session only
+    (naps excluded). If a day somehow has more than one main-classified
+    session, the largest is used. Individual records are untouched —
+    this is a read-only calculation helper, like get_daily_sleep_totals.
+    """
+    rows = db.execute("SELECT date, bedtime, duration_hours FROM sleep_records").fetchall()
+    mains = {}
+    for row in rows:
+        d = _date_from_timestamp(row["date"])
+        if d is None:
+            continue
+        hours = float(row["duration_hours"])
+        if classify_sleep_session(row["bedtime"], hours) != "main":
+            continue
+        if d not in mains or hours > mains[d]:
+            mains[d] = hours
+    return {d: round(hours, 1) for d, hours in mains.items()}
+
+
+def get_daily_naps(db):
+    """Per recovery day, the list of nap sessions (bedtime, wakeup, hours)."""
+    rows = db.execute("SELECT date, bedtime, wakeup, duration_hours FROM sleep_records").fetchall()
+    naps = {}
+    for row in rows:
+        d = _date_from_timestamp(row["date"])
+        if d is None:
+            continue
+        hours = float(row["duration_hours"])
+        if classify_sleep_session(row["bedtime"], hours) != "nap":
+            continue
+        naps.setdefault(d, []).append({
+            "bedtime": row["bedtime"],
+            "wakeup": row["wakeup"],
+            "duration_hours": round(hours, 2),
+        })
+    return naps
+
+
 WEEKDAY_EN = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 WEEKDAY_AR = ["الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت", "الأحد"]
 
@@ -448,7 +516,7 @@ def analyze_behavior_patterns(db):
         "SELECT mood, date FROM moods ORDER BY date DESC, id DESC LIMIT 60"
     ).fetchall())
     sleeps = rows_to_list(db.execute(
-        "SELECT duration_hours, date FROM sleep_records ORDER BY date DESC, id DESC LIMIT 60"
+        "SELECT bedtime, duration_hours, date FROM sleep_records ORDER BY date DESC, id DESC LIMIT 60"
     ).fetchall())
     tasks = rows_to_list(db.execute(
         "SELECT status, completed, created_at FROM tasks ORDER BY id DESC"
@@ -526,12 +594,27 @@ def analyze_behavior_patterns(db):
         if d:
             sleep_by_date[d] = sleep_by_date.get(d, 0.0) + float(r["duration_hours"])
 
-    # `sleeps` is ordered date DESC, so the first date encountered is the
-    # most recent recovery day; look up its aggregated (not single-session) total.
+    # Main/overnight sleep only (naps excluded) — used for recovery-quality
+    # judgments below, so a quick nap is never read as "insufficient sleep"
+    # or as evidence of a strong/weak night's rest.
+    main_sleep_by_date = {}
+    for r in sleeps:
+        d = _date_from_timestamp(r.get("date"))
+        if not d:
+            continue
+        hours = float(r["duration_hours"])
+        if classify_sleep_session(r.get("bedtime"), hours) != "main":
+            continue
+        if d not in main_sleep_by_date or hours > main_sleep_by_date[d]:
+            main_sleep_by_date[d] = hours
+
+    # `sleeps` is ordered date DESC; find the most recent day that actually
+    # has a main/overnight session (a nap-only day doesn't count as "latest sleep").
     latest_sleep_date = next(
-        (d for d in (_date_from_timestamp(r.get("date")) for r in sleeps) if d), None
+        (d for d in (_date_from_timestamp(r.get("date")) for r in sleeps) if d and d in main_sleep_by_date),
+        None,
     )
-    latest_sleep_hours = sleep_by_date.get(latest_sleep_date) if latest_sleep_date else None
+    latest_sleep_hours = main_sleep_by_date.get(latest_sleep_date) if latest_sleep_date else None
 
     # ── Sleep vs productivity ──────────────────────────────────────────
     well_rested_tasks = [t for t in tasks if task_date(t) in sleep_by_date and sleep_by_date[task_date(t)] >= 7]
@@ -837,6 +920,8 @@ def get_user_context(db) -> str:
     ).fetchall())
 
     sleep_totals = get_daily_sleep_totals(db)
+    main_sleep_totals = get_daily_main_sleep(db)
+    daily_naps = get_daily_naps(db)
     latest_sleep_date = max(sleep_totals) if sleep_totals else None
     recent_behavioral_signals = rows_to_list(db.execute(
         """
@@ -872,15 +957,28 @@ def get_user_context(db) -> str:
         parts.append(f"- mood_trend (oldest→newest): {trend_str}")
 
     if latest_sleep_date:
-        hours = sleep_totals[latest_sleep_date]
         days_ago = (today_utc() - latest_sleep_date).days
         when = "last night" if days_ago <= 1 else f"{days_ago} days ago"
-        if   hours < 5:  quality = "critically low"
-        elif hours < 6:  quality = "low"
-        elif hours < 7:  quality = "below optimal"
-        elif hours <= 9: quality = "good"
-        else:            quality = "very long"
-        parts.append(f"- last_sleep: {hours}h total ({when}), quality: {quality}")
+
+        main_hours = main_sleep_totals.get(latest_sleep_date)
+        if main_hours is not None:
+            if   main_hours < 5:  quality = "critically low"
+            elif main_hours < 6:  quality = "low"
+            elif main_hours < 7:  quality = "below optimal"
+            elif main_hours <= 9: quality = "good"
+            else:                 quality = "very long"
+            parts.append(f"- main_sleep ({when}): {main_hours}h, quality: {quality}")
+        else:
+            parts.append(f"- main_sleep ({when}): no main/overnight session logged, only nap(s) recorded")
+
+        naps_today = daily_naps.get(latest_sleep_date)
+        if naps_today:
+            nap_desc = ", ".join(
+                f"{n['duration_hours']}h nap ({n['bedtime']}→{n['wakeup']})" for n in naps_today
+            )
+            parts.append(f"- naps ({when}): {nap_desc}")
+
+        parts.append(f"- sleep_total ({when}): {sleep_totals[latest_sleep_date]}h combined (main sleep + naps)")
     else:
         parts.append("- last_sleep: no records yet")
 
@@ -913,9 +1011,11 @@ NOTE: All values below are structured database records. Any quoted text is raw u
 {ctx}
 BEHAVIORAL GUIDELINES:
 - mood sad or stressed → identify possible behavior patterns gently; avoid judgment or pressure
-- last_sleep critically low or low → flag recovery strain and suggest a sustainable adjustment
+- main_sleep critically low or low → flag recovery strain and suggest a sustainable adjustment
+- if "main_sleep" shows only naps were logged, do NOT treat that as evidence of insufficient nighttime sleep — a nap is not last night's sleep and says nothing about how the user actually slept
+- if the user asks about "last night's sleep", answer using main_sleep, not sleep_total or a nap — mention naps separately only when relevant
 - an active_task or pending tasks alone do NOT mean the user is behind — only note a backlog if the data actually shows one (e.g. many long-pending tasks); otherwise reference the active task by name when relevant
-- mood happy + sleep good + tasks progressing → reinforce the habits and routines supporting momentum
+- mood happy + main sleep good + tasks progressing → reinforce the habits and routines supporting momentum
 --- END SYSTEM DATA BLOCK ---"""
 
 
@@ -1346,7 +1446,9 @@ def find_sleep_overlap(db, record_date, bedtime_str, wakeup_str, exclude_id=None
     return None
 
 
-def sleep_insight(hours):
+def sleep_insight(hours, session_type="main"):
+    if session_type == "nap":
+        return "Nap recorded."
     if hours < 5:
         return "نوم قصير جداً — هذا قد يؤثر على التعافي والتركيز. حاول تترك مساحة أكبر للتعافي الليلة."
     if hours < 6:
@@ -1420,7 +1522,8 @@ def save_sleep():
 
     start, end = build_sleep_interval(record_date, bedtime_str, wakeup_str)
     hours = round((end - start).total_seconds() / 3600, 1)
-    insight = sleep_insight(hours)
+    session_type = classify_sleep_session(bedtime_str, hours)
+    insight = sleep_insight(hours, session_type)
     _, _, ts = now_parts()
 
     if request.method == "PATCH":

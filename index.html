@@ -1051,6 +1051,11 @@
     .sleep-rec-info { flex: 1; }
     .sleep-rec-hours { font-size: 16px; font-weight: 700; color: var(--text-primary); }
     .sleep-rec-times { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+    .sleep-rec-nap-tag {
+      display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: .02em;
+      color: var(--mint-dark); background: var(--mint-light);
+      border-radius: 6px; padding: 2px 7px; margin-top: 4px;
+    }
     .sleep-rec-date { font-size: 11px; color: var(--text-muted); text-align: end; }
     .sleep-rec-actions { display: flex; gap: 5px; flex-shrink: 0; }
     .sleep-rec-btn {
@@ -1333,7 +1338,7 @@
           <button class="btn-add" onclick="addTask()">+</button>
         </div>
         <div class="tasks-filter-row">
-          <div class="filter-chip active" data-filter="all" onclick="setFilter('all', this)" data-i18n="filter_all">All</div>
+          <div class="filter-chip active" data-filter="all" onclick="setFilter('all', this)" data-i18n="filter_all">Current</div>
           <div class="filter-chip" data-filter="todo" onclick="setFilter('todo', this)" data-i18n="filter_todo">Todo</div>
           <div class="filter-chip" data-filter="active" onclick="setFilter('active', this)" data-i18n="filter_active">Active</div>
           <div class="filter-chip" data-filter="done" onclick="setFilter('done', this)" data-i18n="filter_done">Done</div>
@@ -1582,7 +1587,7 @@ const TRANSLATIONS = {
     home_focus_title:    "Protect your focus",
     home_focus_sub:      "Build a practical rhythm that balances productivity, recovery, and focus.",
     task_placeholder:    "Add a focus task or habit...",
-    filter_all:          "All", filter_todo: "Todo", filter_active: "Active", filter_done: "Done",
+    filter_all:          "Current", filter_todo: "Todo", filter_active: "Active", filter_done: "Done",
     btn_start:           "▶ Start", btn_complete: "✓ Done", btn_undo: "↩ Undo", btn_edit: "✎ Edit", btn_delete: "✕",
     save_edit:           "Save", cancel_edit: "Cancel",
     task_empty_all:      "No focus tasks yet. Add one to start building momentum.",
@@ -1629,6 +1634,7 @@ const TRANSLATIONS = {
     sleep_delete_confirm: "Delete this sleep record?",
     sleep_edit:           "Edit",
     sleep_delete:         "Delete",
+    sleep_nap_label:      "Nap",
     sleep_save_error:    "Could not save sleep data.",
     sleep_delete_error:  "Could not delete sleep data.",
     sleep_empty_state:   "No recovery records yet. Log your first night!",
@@ -1675,7 +1681,7 @@ const TRANSLATIONS = {
     home_focus_title:    "احمِ تركيزك",
     home_focus_sub:      "ابنِ إيقاعاً عملياً يوازن بين الإنتاجية والتعافي والتركيز.",
     task_placeholder:    "أضف مهمة تركيز أو عادة...",
-    filter_all:          "الكل", filter_todo: "قائمة", filter_active: "نشط", filter_done: "منجز",
+    filter_all:          "الحالية", filter_todo: "قائمة", filter_active: "نشط", filter_done: "منجز",
     btn_start:           "▶ ابدأ", btn_complete: "✓ خلصت", btn_undo: "↩ تراجع", btn_edit: "✎ عدّل", btn_delete: "✕",
     save_edit:           "حفظ", cancel_edit:  "إلغاء",
     task_empty_all:      "ما في مهام تركيز بعد. أضف مهمة لبداية التقدم.",
@@ -1722,6 +1728,7 @@ const TRANSLATIONS = {
     sleep_delete_confirm: "هل تريد حذف سجل النوم هذا؟",
     sleep_edit:           "تعديل",
     sleep_delete:         "حذف",
+    sleep_nap_label:      "قيلولة",
     sleep_save_error:    "تعذّر حفظ بيانات النوم.",
     sleep_delete_error:  "تعذّر حذف بيانات النوم.",
     sleep_empty_state:   "ما في سجلات تعافٍ بعد. سجّل ليلتك الأولى!",
@@ -2048,7 +2055,7 @@ function renderTasks() {
   const list = document.getElementById('tasks-list');
   if (!list) return;
 
-  let filtered = state.tasks;
+  let filtered = state.tasks.filter(tk => tk.status !== 'done');
   if (state.taskFilter === 'todo')   filtered = state.tasks.filter(tk => tk.status === 'todo');
   if (state.taskFilter === 'active') filtered = state.tasks.filter(tk => tk.status === 'active');
   if (state.taskFilter === 'done')   filtered = state.tasks.filter(tk => tk.status === 'done');
@@ -2680,11 +2687,39 @@ function cancelSleepEdit() {
   clearSleepForm();
 }
 
+// Human-readable sleep duration, computed from the exact bedtime/wakeup
+// clock times (not the rounded duration_hours field), so a 21-minute nap
+// never gets rendered as an odd decimal like "0.3h".
+function formatSleepDuration(bedtimeStr, wakeupStr) {
+  try {
+    const [bh, bm] = String(bedtimeStr).split(':').map(Number);
+    const [wh, wm] = String(wakeupStr).split(':').map(Number);
+    if ([bh, bm, wh, wm].some(n => Number.isNaN(n))) return '';
+    let diff = (wh * 60 + wm) - (bh * 60 + bm);
+    if (diff <= 0) diff += 24 * 60; // crosses midnight
+    const h = Math.floor(diff / 60);
+    const m = diff % 60;
+    if (h === 0) return `${m} min`;
+    if (m === 0) return `${h}h`;
+    return `${h}h ${m}min`;
+  } catch(_) { return ''; }
+}
+
+// Same nap-vs-main classification as the backend (duration together with
+// the start/bedtime period — never duration alone), used only to show the
+// "Nap" label in Recovery History; the underlying record is never changed.
+function classifySleepSession(bedtimeStr, durationHours) {
+  const bedHour = parseInt(String(bedtimeStr).split(':')[0], 10);
+  if (Number.isNaN(bedHour) || durationHours > 3) return 'main';
+  const startedAtNight = bedHour >= 20 || bedHour < 6;
+  return startedAtNight ? 'main' : 'nap';
+}
+
 function showSleepResult(rec) {
   const hoursEl = document.getElementById('sleep-hours-display');
   const insightEl = document.getElementById('sleep-insight-text');
   const resultEl = document.getElementById('sleep-result');
-  if (hoursEl) hoursEl.textContent = rec.duration_hours;
+  if (hoursEl) hoursEl.textContent = formatSleepDuration(rec.bedtime, rec.wakeup);
   if (insightEl) insightEl.textContent = rec.insight;
   if (resultEl) resultEl.classList.add('visible');
 }
@@ -2796,19 +2831,23 @@ function renderSleepHistory() {
     el.innerHTML = `<div class="empty-state"><div class="empty-icon">🌙</div><p>${t('sleep_empty_state')}</p></div>`;
     return;
   }
-  el.innerHTML = state.sleep.map(r => `
+  el.innerHTML = state.sleep.map(r => {
+    const isNap = classifySleepSession(r.bedtime, Number(r.duration_hours)) === 'nap';
+    return `
     <div class="sleep-record-item">
       <div class="sleep-rec-icon">🌙</div>
       <div class="sleep-rec-info">
-        <div class="sleep-rec-hours">${r.duration_hours}h</div>
+        <div class="sleep-rec-hours">${formatSleepDuration(r.bedtime, r.wakeup)}</div>
         <div class="sleep-rec-times">${escHtml(r.bedtime)} → ${escHtml(r.wakeup)}</div>
+        ${isNap ? `<div class="sleep-rec-nap-tag" data-i18n="sleep_nap_label">${t('sleep_nap_label')}</div>` : ''}
       </div>
       <div class="sleep-rec-date">${escHtml(r.date)}</div>
       <div class="sleep-rec-actions">
         <button class="sleep-rec-btn" type="button" onclick="editSleep(${Number(r.id)})" data-i18n="sleep_edit">${t('sleep_edit')}</button>
         <button class="sleep-rec-btn delete" type="button" onclick="deleteSleep(${Number(r.id)})" data-i18n="sleep_delete">${t('sleep_delete')}</button>
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 /* ═══════════════════════════════════════════════════════════
