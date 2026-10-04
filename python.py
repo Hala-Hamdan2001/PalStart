@@ -3,6 +3,7 @@ import re
 import sqlite3
 import datetime
 import unicodedata
+import uuid
 from flask import Flask, request, jsonify, send_from_directory, g
 from flask_cors import CORS
 from dotenv import load_dotenv
@@ -18,6 +19,8 @@ try:
     ai_client = OpenAI(
         base_url="https://openrouter.ai/api/v1",
         api_key=OPENAI_API_KEY,
+        timeout=20.0,
+        max_retries=1,
     )
 except Exception:
     ai_client = None
@@ -119,7 +122,8 @@ def init_db():
                     conversation_id INTEGER REFERENCES conversations(id) ON DELETE CASCADE,
                     role            TEXT NOT NULL,
                     content         TEXT NOT NULL,
-                    timestamp       TEXT NOT NULL
+                    timestamp       TEXT NOT NULL,
+                    request_id      TEXT
                 );
                 INSERT INTO messages (id, conversation_id, role, content, timestamp)
                 SELECT id, NULL, role, content, timestamp FROM messages_old;
@@ -133,10 +137,24 @@ def init_db():
                 conversation_id INTEGER REFERENCES conversations(id) ON DELETE CASCADE,
                 role            TEXT NOT NULL,
                 content         TEXT NOT NULL,
-                timestamp       TEXT NOT NULL
+                timestamp       TEXT NOT NULL,
+                request_id      TEXT
             )
         """)
         conn.commit()
+
+    # Stable client request IDs make chat retries idempotent. Existing messages
+    # are preserved with NULL IDs, so no historical data needs rewriting.
+    _add_column_if_missing(conn, "messages", "request_id", "TEXT")
+    c.executescript("""
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_user_request_id
+            ON messages(request_id)
+            WHERE role='user' AND request_id IS NOT NULL;
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_assistant_request_id
+            ON messages(request_id)
+            WHERE role='assistant' AND request_id IS NOT NULL;
+    """)
+    conn.commit()
 
     # Create this after the messages migration so its foreign key always points
     # at the final messages table, including on legacy installations.
@@ -490,7 +508,20 @@ def store_manual_mood_signal(db, mood, date, timestamp):
         """,
         (mood_signal[0], mood_signal[1], date, timestamp),
     )
-    db.commit()
+
+
+def sync_manual_mood_signal(db, date, timestamp):
+    """Keep the daily derived signal aligned with the latest mood record."""
+    latest = db.execute(
+        "SELECT mood FROM moods WHERE date=? ORDER BY id DESC LIMIT 1", (date,)
+    ).fetchone()
+    if latest:
+        store_manual_mood_signal(db, latest["mood"], date, timestamp)
+    else:
+        db.execute(
+            "DELETE FROM behavioral_signals WHERE source='manual_mood' AND date=?",
+            (date,),
+        )
 
 def analyze_behavior_patterns(db):
     """
@@ -1075,25 +1106,46 @@ If the user writes in Arabic, reply ONLY in Arabic (Ammiya/Spoken preferred).
 If the user writes in English, reply ONLY in English."""
 
 
+class AIServiceError(Exception):
+    """Safe, machine-readable AI failure without exposing provider details."""
+
+    def __init__(self, code):
+        self.code = code
+        super().__init__(code)
+
+
 def ask_ai(user_message: str, history: list, user_context: str = "") -> str:
-    if ai_client is not None:
-        try:
-            system_prompt = BASE_SYSTEM_PROMPT + user_context
-            messages = [{"role": "system", "content": system_prompt}]
-            for h in history[-30:]:
-                role = "user" if h.get("role") == "user" else "assistant"
-                messages.append({"role": role, "content": h.get("content", "")})
-            messages.append({"role": "user", "content": user_message})
-            response = ai_client.chat.completions.create(
-                model="openai/gpt-4o-mini",
-                messages=messages,
-                temperature=0.6,
-            )
-            if response.choices:
-                return response.choices[0].message.content.strip()
-        except Exception as e:
-            print(f"AI Error: {e}")
-    return "يبدو أن هناك مشكلة في الاتصال. أرسل وصفاً للسلوك أو النمط مرة أخرى عندما يعود الاتصال."
+    if ai_client is None:
+        raise AIServiceError("ai_unavailable")
+
+    try:
+        system_prompt = BASE_SYSTEM_PROMPT + user_context
+        messages = [{"role": "system", "content": system_prompt}]
+        for h in history[-30:]:
+            role = "user" if h.get("role") == "user" else "assistant"
+            messages.append({"role": role, "content": h.get("content", "")})
+        messages.append({"role": "user", "content": user_message})
+        response = ai_client.chat.completions.create(
+            model="openai/gpt-4o-mini",
+            messages=messages,
+            temperature=0.6,
+        )
+        if not response.choices:
+            raise AIServiceError("ai_provider_error")
+        content = response.choices[0].message.content
+        if not isinstance(content, str) or not content.strip():
+            raise AIServiceError("ai_provider_error")
+        return content.strip()
+    except AIServiceError:
+        raise
+    except Exception as exc:
+        print(f"AI provider error: {exc}")
+        error_code = (
+            "ai_timeout"
+            if isinstance(exc, TimeoutError) or "timeout" in type(exc).__name__.lower()
+            else "ai_provider_error"
+        )
+        raise AIServiceError(error_code) from exc
 
 
 # ── Frontend ──────────────────────────────────────────────────────────────────
@@ -1164,7 +1216,7 @@ def get_conversation(conv_id):
     if not conv:
         return jsonify({"error": "Not found"}), 404
     messages = rows_to_list(db.execute(
-        "SELECT role, content, timestamp FROM messages WHERE conversation_id=? ORDER BY id ASC",
+        "SELECT id, role, content, timestamp, request_id FROM messages WHERE conversation_id=? ORDER BY id ASC",
         (conv_id,)
     ).fetchall())
     return jsonify({"conversation": conv, "messages": messages})
@@ -1214,54 +1266,153 @@ def get_home_insight():
 
 @app.route("/chat", methods=["POST"])
 def chat():
-    data = request.get_json() or {}
-    user_message = (data.get("message") or "").strip()
-    history = data.get("history", [])
-    conversation_id = data.get("conversation_id")
+    data = request.get_json(silent=True) or {}
+    if not isinstance(data, dict):
+        return jsonify({"error": "Invalid request body."}), 400
+    raw_message = data.get("message")
+    user_message = raw_message.strip() if isinstance(raw_message, str) else ""
     if not user_message:
         return jsonify({"error": "No message provided"}), 400
 
-    _, _, ts = now_parts()
+    history = data.get("history", [])
+    if not isinstance(history, list):
+        history = []
+    history = [
+        {"role": item["role"], "content": item["content"]}
+        for item in history
+        if isinstance(item, dict)
+        and item.get("role") in ("user", "assistant")
+        and isinstance(item.get("content"), str)
+    ]
+
+    raw_conversation_id = data.get("conversation_id")
+    conversation_id = None
+    if raw_conversation_id not in (None, ""):
+        try:
+            conversation_id = int(raw_conversation_id)
+        except (TypeError, ValueError):
+            return jsonify({"error": "Invalid conversation id."}), 400
+        if conversation_id <= 0:
+            return jsonify({"error": "Invalid conversation id."}), 400
+
+    request_id = str(data.get("request_id") or uuid.uuid4().hex).strip()
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,100}", request_id):
+        return jsonify({"error": "Invalid request id."}), 400
+
     db = get_db()
-
     is_new_conversation = False
-    if not conversation_id:
-        title = make_title(user_message)
-        cur = db.execute(
-            "INSERT INTO conversations (title, created_at, updated_at) VALUES (?,?,?)",
-            (title, ts, ts)
-        )
-        db.commit()
-        conversation_id = cur.lastrowid
-        is_new_conversation = True
+    detected_signals = []
+    user_row = db.execute(
+        "SELECT id, conversation_id, content, timestamp FROM messages "
+        "WHERE request_id=? AND role='user'",
+        (request_id,),
+    ).fetchone()
+
+    if user_row:
+        if user_row["content"] != user_message:
+            return jsonify({
+                "error": "Request id was already used for another message."
+            }), 409
+        if conversation_id is not None and conversation_id != user_row["conversation_id"]:
+            return jsonify({
+                "error": "Request id belongs to another conversation."
+            }), 409
+        conversation_id = user_row["conversation_id"]
+        user_message_id = user_row["id"]
+        detected_signals = rows_to_list(db.execute(
+            "SELECT signal, confidence FROM behavioral_signals "
+            "WHERE source='conversation' AND message_id=? ORDER BY id ASC",
+            (user_message_id,),
+        ).fetchall())
+        cached_reply = db.execute(
+            "SELECT content FROM messages WHERE request_id=? AND role='assistant'",
+            (request_id,),
+        ).fetchone()
+        if cached_reply:
+            conv = row_to_dict(db.execute(
+                "SELECT * FROM conversations WHERE id=?", (conversation_id,)
+            ).fetchone())
+            return jsonify({
+                "reply": cached_reply["content"],
+                "conversation_id": conversation_id,
+                "conversation": conv,
+                "is_new_conversation": False,
+                "request_id": request_id,
+                "detected_signals": detected_signals,
+            })
     else:
-        db.execute("UPDATE conversations SET updated_at=? WHERE id=?", (ts, conversation_id))
+        _, _, ts = now_parts()
+        if conversation_id is None:
+            title = make_title(user_message)
+            cur = db.execute(
+                "INSERT INTO conversations (title, created_at, updated_at) VALUES (?,?,?)",
+                (title, ts, ts)
+            )
+            conversation_id = cur.lastrowid
+            is_new_conversation = True
+        else:
+            conv_exists = db.execute(
+                "SELECT id FROM conversations WHERE id=?", (conversation_id,)
+            ).fetchone()
+            if not conv_exists:
+                return jsonify({"error": "Conversation not found."}), 404
+            db.execute(
+                "UPDATE conversations SET updated_at=? WHERE id=?", (ts, conversation_id)
+            )
+
+        message_cursor = db.execute(
+            "INSERT INTO messages (conversation_id, role, content, timestamp, request_id) "
+            "VALUES (?,?,?,?,?)",
+            (conversation_id, "user", user_message, ts, request_id)
+        )
+        user_message_id = message_cursor.lastrowid
         db.commit()
+        detected_signals = store_conversation_signals(
+            db, user_message_id, user_message, ts[:10], ts
+        )
 
-    message_cursor = db.execute(
-        "INSERT INTO messages (conversation_id, role, content, timestamp) VALUES (?,?,?,?)",
-        (conversation_id, "user", user_message, ts)
-    )
-    db.commit()
-
-    detected_signals = store_conversation_signals(
-        db, message_cursor.lastrowid, user_message, ts[:10], ts
-    )
     user_context = get_user_context(db)
-    ai_reply = ask_ai(user_message, history, user_context)
+    try:
+        ai_reply = ask_ai(user_message, history, user_context)
+    except AIServiceError as exc:
+        conv = row_to_dict(db.execute(
+            "SELECT * FROM conversations WHERE id=?", (conversation_id,)
+        ).fetchone())
+        status_code = {
+            "ai_unavailable": 503,
+            "ai_timeout": 504,
+        }.get(exc.code, 502)
+        return jsonify({
+            "status": "degraded",
+            "error": {"code": exc.code},
+            "conversation_id": conversation_id,
+            "conversation": conv,
+            "is_new_conversation": is_new_conversation,
+            "user_message_id": user_message_id,
+            "request_id": request_id,
+            "detected_signals": detected_signals,
+        }), status_code
 
+    _, _, reply_ts = now_parts()
     db.execute(
-        "INSERT INTO messages (conversation_id, role, content, timestamp) VALUES (?,?,?,?)",
-        (conversation_id, "assistant", ai_reply, ts)
+        "INSERT INTO messages (conversation_id, role, content, timestamp, request_id) "
+        "VALUES (?,?,?,?,?)",
+        (conversation_id, "assistant", ai_reply, reply_ts, request_id)
+    )
+    db.execute(
+        "UPDATE conversations SET updated_at=? WHERE id=?", (reply_ts, conversation_id)
     )
     db.commit()
 
-    conv = row_to_dict(db.execute("SELECT * FROM conversations WHERE id=?", (conversation_id,)).fetchone())
+    conv = row_to_dict(db.execute(
+        "SELECT * FROM conversations WHERE id=?", (conversation_id,)
+    ).fetchone())
     return jsonify({
         "reply": ai_reply,
         "conversation_id": conversation_id,
         "conversation": conv,
         "is_new_conversation": is_new_conversation,
+        "request_id": request_id,
         "detected_signals": detected_signals,
     })
 
@@ -1394,24 +1545,27 @@ def save_mood():
             "UPDATE moods SET mood=?, note=?, time=?, timestamp=? WHERE id=?",
             (mood, note, time_, ts, existing["id"])
         )
-        db.commit()
-        entry = row_to_dict(db.execute("SELECT * FROM moods WHERE id=?", (existing["id"],)).fetchone())
         updated = True
     else:
         cur = db.execute(
             "INSERT INTO moods (mood, note, date, time, timestamp) VALUES (?,?,?,?,?)",
             (mood, note, date, time_, ts)
         )
-        db.commit()
-        entry = row_to_dict(db.execute("SELECT * FROM moods WHERE id=?", (cur.lastrowid,)).fetchone())
+        existing_id = cur.lastrowid
         updated = False
 
     try:
-        store_manual_mood_signal(db, mood, date, ts)
+        sync_manual_mood_signal(db, date, ts)
+        db.commit()
     except Exception as exc:
-        # A signal write must never break the existing manual mood workflow.
         db.rollback()
         print(f"Manual mood signal error: {exc}")
+        return jsonify({"error": "Could not save mood signal."}), 500
+
+    entry_id = existing["id"] if existing else existing_id
+    entry = row_to_dict(db.execute(
+        "SELECT * FROM moods WHERE id=?", (entry_id,)
+    ).fetchone())
 
     response = jsonify({"entry": entry, "updated": updated})
     return response, (200 if updated else 201)
@@ -1431,11 +1585,18 @@ def edit_mood(record_id):
     if mood not in VALID_MOODS:
         return jsonify({"error": f"Mood must be one of {VALID_MOODS}"}), 400
 
-    db.execute(
-        "UPDATE moods SET mood=?, note=? WHERE id=?",
-        (mood, note, record_id),
-    )
-    db.commit()
+    _, _, ts = now_parts()
+    try:
+        db.execute(
+            "UPDATE moods SET mood=?, note=? WHERE id=?",
+            (mood, note, record_id),
+        )
+        sync_manual_mood_signal(db, existing["date"], ts)
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        print(f"Manual mood signal error: {exc}")
+        return jsonify({"error": "Could not update mood signal."}), 500
     entry = row_to_dict(db.execute("SELECT * FROM moods WHERE id=?", (record_id,)).fetchone())
     return jsonify({"entry": entry, "updated": True}), 200
 
@@ -1443,12 +1604,21 @@ def edit_mood(record_id):
 @app.route("/mood/<int:record_id>", methods=["DELETE"])
 def delete_mood(record_id):
     db = get_db()
-    existing = db.execute("SELECT id FROM moods WHERE id=?", (record_id,)).fetchone()
+    existing = db.execute(
+        "SELECT id, date FROM moods WHERE id=?", (record_id,)
+    ).fetchone()
     if not existing:
         return jsonify({"error": "Signal not found."}), 404
 
-    db.execute("DELETE FROM moods WHERE id=?", (record_id,))
-    db.commit()
+    _, _, ts = now_parts()
+    try:
+        db.execute("DELETE FROM moods WHERE id=?", (record_id,))
+        sync_manual_mood_signal(db, existing["date"], ts)
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        print(f"Manual mood signal error: {exc}")
+        return jsonify({"error": "Could not delete mood signal."}), 500
     return jsonify({"success": True, "id": record_id}), 200
 
 
@@ -1567,7 +1737,17 @@ def save_sleep():
         if record_date is None:
             return jsonify({"error": "The existing sleep record has an invalid date."}), 400
     else:
-        record_date = today_utc()
+        raw_start_date = data.get("sleep_start_date")
+        if raw_start_date:
+            try:
+                record_date = datetime.date.fromisoformat(str(raw_start_date))
+            except ValueError:
+                return jsonify({"error": "Invalid sleep start date."}), 400
+            if record_date.isoformat() != str(raw_start_date):
+                return jsonify({"error": "Invalid sleep start date."}), 400
+        else:
+            # Backward compatibility for clients that predate local start dates.
+            record_date = today_utc()
 
     overlap = find_sleep_overlap(
         db,
@@ -1660,4 +1840,15 @@ def get_stats():
 if __name__ == "__main__":
     init_db()
     port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port, debug=True)
+    truthy = {"1", "true", "yes", "on"}
+    production_values = truthy | {"prod", "production"}
+    production_markers = (
+        os.environ.get("APP_ENV", ""),
+        os.environ.get("FLASK_ENV", ""),
+        os.environ.get("NODE_ENV", ""),
+        os.environ.get("REPLIT_DEPLOYMENT", ""),
+    )
+    is_production = any(value.strip().lower() in production_values
+                        for value in production_markers)
+    debug_enabled = not is_production and os.environ.get("FLASK_DEBUG", "").strip().lower() in truthy
+    app.run(host="0.0.0.0", port=port, debug=debug_enabled)

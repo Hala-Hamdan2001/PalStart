@@ -795,6 +795,13 @@
       background: var(--surface2); color: var(--text-primary);
       border: 1px solid var(--border); border-bottom-left-radius: 5px;
     }
+    .chat-error-note { color: var(--text-muted); font-size: 12px; }
+    .chat-retry-btn {
+      align-self: flex-start; margin-top: 6px; padding: 4px 9px;
+      border: 1px solid var(--border); border-radius: 8px;
+      background: var(--white); color: var(--text-primary);
+      font-size: 12px; cursor: pointer;
+    }
     .msg-time { font-size: 10px; color: var(--text-muted); margin-top: 3px; padding: 0 4px; }
 
     .typing-indicator {
@@ -1574,6 +1581,7 @@ const TRANSLATIONS = {
     insight_card_title:  "Pilo noticed",
     insight_loading:     "Looking at your recent context...",
     insight_empty:       "Log a few signals, recovery records, or focus tasks to unlock a personalized insight.",
+    insight_load_error:  "Could not load your insight right now.",
     insight_updated:     "Personalized from your recent activity",
     stat_tasks:          "Tracked Tasks", stat_active: "Active", stat_done: "Done", stat_sleep: "Last Recovery",
     quick_access:        "Quick Access",
@@ -1601,6 +1609,11 @@ const TRANSLATIONS = {
     chat_welcome_sub:    "Tell me what's on your mind — I'll use your recent context to help.",
     chat_context_hint:   "Personalized from your recent activity",
     chat_placeholder:    "Tell me what's on your mind...",
+    chat_ai_unavailable: "Pilo's AI service is not configured right now.",
+    chat_ai_error:       "Pilo couldn't get a response just now.",
+    chat_ai_timeout:     "Pilo's response timed out. Retry this message.",
+    chat_retry:          "Retry",
+    chat_retry_first:    "Retry the unanswered message or start a new session first.",
     starter1: "Spot a pattern", starter2: "Help me focus", starter3: "Review my recovery",
     starter4: "Explore my patterns", starter5: "Review my habits", starter6: "Show my insights",
     mood_question:       "Log today's signal",
@@ -1618,6 +1631,7 @@ const TRANSLATIONS = {
     mood_not_found_error: "This signal no longer exists.",
     mood_save_error:     "Could not save signal.",
     mood_delete_error:   "Could not delete signal.",
+    mood_load_error:     "Could not load signals.",
     mood_delete_confirm: "Delete this signal?",
     mood_edit:            "Edit",
     mood_delete:           "Delete",
@@ -1637,16 +1651,23 @@ const TRANSLATIONS = {
     sleep_nap_label:      "Nap",
     sleep_save_error:    "Could not save sleep data.",
     sleep_delete_error:  "Could not delete sleep data.",
+    sleep_load_error:    "Could not load recovery records.",
     sleep_empty_state:   "No recovery records yet. Log your first night!",
     hours_of_sleep:      "hours of recovery sleep",
     sleep_history_title: "Recovery History",
     task_save_error:     "Could not save task.",
+    task_update_error:   "Could not update task.",
+    task_delete_error:   "Could not delete task.",
+    task_load_error:     "Could not load tasks.",
+    chat_load_error:     "Could not load this session.",
+    chat_delete_error:   "Could not delete this session.",
     toast_insight_deleted: "Insight session deleted",
     voice_not_supported: "Voice input not supported in this browser",
     voice_capture_error: "Could not capture voice",
     voice_listening:     "Listening...",
     settings_appearance: "Appearance",
     dark_mode:           "Dark Mode", dark_mode_sub: "Easy on the eyes at night",
+    settings_save_error: "Could not save settings.",
     settings_language:   "Language",
     language:            "Language", language_sub: "Choose your preferred language",
     settings_about:      "About",
@@ -1668,6 +1689,7 @@ const TRANSLATIONS = {
     insight_card_title:  "بيلو لاحظ",
     insight_loading:     "بيلو يطّلع على سياقك الأخير...",
     insight_empty:       "سجّل بعض الإشارات أو التعافي أو مهام التركيز لتحصل على رؤية شخصية.",
+    insight_load_error:  "تعذّر تحميل رؤيتك حالياً.",
     insight_updated:     "مخصّصة بناءً على نشاطك الأخير",
     stat_tasks:          "المهام المتابعة", stat_active: "نشط", stat_done: "منجز", stat_sleep: "آخر تعافٍ",
     quick_access:        "وصول سريع",
@@ -1695,6 +1717,11 @@ const TRANSLATIONS = {
     chat_welcome_sub:    "قلّي شو يلي في بالك — رح أستخدم سياقك الأخير لأساعدك.",
     chat_context_hint:   "مخصّصة بناءً على نشاطك الأخير",
     chat_placeholder:    "قلّي شو يلي في بالك...",
+    chat_ai_unavailable: "خدمة الذكاء الاصطناعي في بيلو غير مُعدّة حالياً.",
+    chat_ai_error:       "ما قدر بيلو يجيب ردّ هالمرة.",
+    chat_ai_timeout:     "انتهت مهلة ردّ بيلو. أعد محاولة هذه الرسالة.",
+    chat_retry:          "أعد المحاولة",
+    chat_retry_first:    "أعد محاولة الرسالة التي لم يصلها رد أو ابدأ جلسة جديدة أولاً.",
     starter1: "اكتشف نمطاً", starter2: "ساعدني أركّز", starter3: "راجع تعافيّي",
     starter4: "اكتشف أنماطي", starter5: "راجع عاداتي", starter6: "اعرض رؤاي",
     mood_question:       "سجّل إشارة اليوم",
@@ -1712,6 +1739,7 @@ const TRANSLATIONS = {
     mood_not_found_error: "هذه الإشارة لم تعد موجودة.",
     mood_save_error:     "تعذّر حفظ الإشارة.",
     mood_delete_error:   "تعذّر حذف الإشارة.",
+    mood_load_error:     "تعذّر تحميل الإشارات.",
     mood_delete_confirm: "هل تريد حذف هذه الإشارة؟",
     mood_edit:            "تعديل",
     mood_delete:           "حذف",
@@ -1731,16 +1759,23 @@ const TRANSLATIONS = {
     sleep_nap_label:      "قيلولة",
     sleep_save_error:    "تعذّر حفظ بيانات النوم.",
     sleep_delete_error:  "تعذّر حذف بيانات النوم.",
+    sleep_load_error:    "تعذّر تحميل سجلات التعافي.",
     sleep_empty_state:   "ما في سجلات تعافٍ بعد. سجّل ليلتك الأولى!",
     hours_of_sleep:      "ساعات نوم للتعافي",
     sleep_history_title: "سجل التعافي",
     task_save_error:     "تعذّر حفظ المهمة.",
+    task_update_error:   "تعذّر تحديث المهمة.",
+    task_delete_error:   "تعذّر حذف المهمة.",
+    task_load_error:     "تعذّر تحميل المهام.",
+    chat_load_error:     "تعذّر تحميل هذه الجلسة.",
+    chat_delete_error:   "تعذّر حذف هذه الجلسة.",
     toast_insight_deleted: "تم حذف جلسة الرؤى",
     voice_not_supported: "إدخال الصوت غير مدعوم في هذا المتصفح",
     voice_capture_error: "تعذّر التقاط الصوت",
     voice_listening:     "بستمع...",
     settings_appearance: "المظهر",
     dark_mode:           "الوضع الداكن", dark_mode_sub: "مريح للعين في الليل",
+    settings_save_error: "تعذّر حفظ الإعدادات.",
     settings_language:   "اللغة",
     language:            "اللغة", language_sub: "اختر لغتك المفضلة",
     settings_about:      "حول",
@@ -1767,6 +1802,9 @@ const state = {
   conversations:      [],
   currentConvId:      null,
   currentChatHistory: [],
+  chatViewRevision:   0,
+  chatRequestInFlight: false,
+  failedChatRequests: new Map(),
   selectedMood:       null,
   taskFilter:         'all',
   isRecording:        false,
@@ -1821,6 +1859,7 @@ function applyTranslations() {
 async function loadSettings() {
   try {
     const r = await fetch(`${API_BASE_URL}settings`);
+    if (!r.ok) throw new Error(`Settings load failed (${r.status})`);
     const d = await r.json();
     const s = d.settings || {};
     if (s.theme === 'dark') {
@@ -1837,12 +1876,13 @@ async function loadSettings() {
 
 async function saveSettings(patch) {
   try {
-    await fetch(`${API_BASE_URL}settings`, {
+    const r = await fetch(`${API_BASE_URL}settings`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(patch)
     });
-  } catch(_) {}
+    if (!r.ok) throw new Error(`Settings save failed (${r.status})`);
+  } catch(_) { toast(t('settings_save_error')); }
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -1945,15 +1985,37 @@ async function loadHomeInsight() {
   try {
     const r = await fetch(`${API_BASE_URL}insights/home?lang=${encodeURIComponent(state.lang)}`);
     const d = await r.json();
+    if (!r.ok) throw new Error(d.error || `Insight request failed (${r.status})`);
     textEl.textContent = d.insight || t('insight_empty');
     if (metaEl && d.insight) metaEl.textContent = t('insight_updated');
   } catch(_) {
-    textEl.textContent = t('insight_empty');
+    textEl.textContent = t('insight_load_error');
   }
 }
 
 function todayStr() {
   return new Date().toISOString().split('T')[0];
+}
+
+function localDateString(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function getLocalSleepStartDate(bedtime, wakeup, now = new Date()) {
+  const toMinutes = value => {
+    const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(String(value || ''));
+    return match ? Number(match[1]) * 60 + Number(match[2]) : null;
+  };
+  const bedtimeMinutes = toMinutes(bedtime);
+  const wakeupMinutes = toMinutes(wakeup);
+  const startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (bedtimeMinutes !== null && wakeupMinutes !== null && wakeupMinutes < bedtimeMinutes) {
+    startDate.setDate(startDate.getDate() - 1);
+  }
+  return localDateString(startDate);
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -1970,9 +2032,10 @@ function quickMood(m) {
 async function loadTasks() {
   try {
     const r = await fetch(`${API_BASE_URL}tasks`);
+    if (!r.ok) throw new Error(`Task load failed (${r.status})`);
     const d = await r.json();
     state.tasks = (d.tasks || []).map(normaliseTask);
-  } catch(_) {}
+  } catch(_) { toast(t('task_load_error')); }
 }
 
 function normaliseTask(t) {
@@ -1991,6 +2054,7 @@ async function addTask() {
       body: JSON.stringify({ title })
     });
     const d = await r.json();
+    if (!r.ok || !d.task) throw new Error(d.error || `Task save failed (${r.status})`);
     state.tasks.unshift(normaliseTask(d.task));
     inp.value = '';
     renderTasks();
@@ -2008,23 +2072,25 @@ async function setTaskStatus(id, status) {
       body: JSON.stringify({ status })
     });
     const d = await r.json();
+    if (!r.ok || !d.task) throw new Error(d.error || `Task update failed (${r.status})`);
     const idx = state.tasks.findIndex(t => t.id === id);
     if (idx !== -1) state.tasks[idx] = normaliseTask(d.task);
     renderTasks();
     refreshHomeStats();
     loadHomeInsight();
-  } catch(_) {}
+  } catch(_) { toast(t('task_update_error')); }
 }
 
 async function deleteTask(id) {
   try {
-    await fetch(`${API_BASE_URL}tasks/${id}`, { method: 'DELETE' });
+    const r = await fetch(`${API_BASE_URL}tasks/${id}`, { method: 'DELETE' });
+    if (!r.ok) throw new Error(`Task delete failed (${r.status})`);
     state.tasks = state.tasks.filter(tk => tk.id !== id);
     renderTasks();
     refreshHomeStats();
     loadHomeInsight();
     toast(t('toast_task_deleted'));
-  } catch(_) {}
+  } catch(_) { toast(t('task_delete_error')); }
 }
 
 async function saveTaskEdit(id, newTitle) {
@@ -2036,12 +2102,13 @@ async function saveTaskEdit(id, newTitle) {
       body: JSON.stringify({ title: newTitle.trim() })
     });
     const d = await r.json();
+    if (!r.ok || !d.task) throw new Error(d.error || `Task update failed (${r.status})`);
     const idx = state.tasks.findIndex(tk => tk.id === id);
     if (idx !== -1) state.tasks[idx] = normaliseTask(d.task);
     renderTasks();
     toast(t('toast_task_saved'));
     loadHomeInsight();
-  } catch(_) {}
+  } catch(_) { toast(t('task_update_error')); }
 }
 
 function setFilter(f, el) {
@@ -2151,10 +2218,11 @@ if (taskInp) {
 async function loadConversations() {
   try {
     const r = await fetch(`${API_BASE_URL}conversations`);
+    if (!r.ok) throw new Error(`Conversation load failed (${r.status})`);
     const d = await r.json();
     state.conversations = d.conversations || [];
     renderConvList();
-  } catch(_) {}
+  } catch(_) { toast(t('chat_load_error')); }
 }
 
 function renderConvList() {
@@ -2205,6 +2273,7 @@ function formatLocalTimeOfDay(ts, fallback) {
 }
 
 function newConversation() {
+  state.chatViewRevision += 1;
   state.currentConvId      = null;
   state.currentChatHistory = [];
   const container = document.getElementById('chat-messages');
@@ -2234,6 +2303,8 @@ function buildChatWelcomeHTML() {
 }
 
 async function selectConversation(id) {
+  const viewRevision = ++state.chatViewRevision;
+  id = Number(id);
   state.currentConvId      = id;
   state.currentChatHistory = [];
   closeSidebar();
@@ -2243,7 +2314,9 @@ async function selectConversation(id) {
 
   try {
     const r = await fetch(`${API_BASE_URL}conversations/${id}`);
+    if (!r.ok) throw new Error(`Conversation load failed (${r.status})`);
     const d = await r.json();
+    if (viewRevision !== state.chatViewRevision) return;
     const conv     = d.conversation;
     const messages = d.messages || [];
 
@@ -2267,21 +2340,31 @@ async function selectConversation(id) {
       });
       container.scrollTop = container.scrollHeight;
     }
+    for (const pending of state.failedChatRequests.values()) {
+      if (messages.some(m => m.request_id === pending.requestId)) {
+        pending.conversationId = id;
+        appendChatError(pending);
+      }
+    }
   } catch(_) {
-    container.innerHTML = '<div class="empty-state"><div class="empty-icon">⚠️</div><p>Could not load insight session.</p></div>';
+    if (viewRevision === state.chatViewRevision) {
+      container.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><p>${t('chat_load_error')}</p></div>`;
+      toast(t('chat_load_error'));
+    }
   }
-  renderConvList();
+  if (viewRevision === state.chatViewRevision) renderConvList();
 }
 
 async function deleteConversation(event, id) {
   event.stopPropagation();
   try {
-    await fetch(`${API_BASE_URL}conversations/${id}`, { method: 'DELETE' });
+    const r = await fetch(`${API_BASE_URL}conversations/${id}`, { method: 'DELETE' });
+    if (!r.ok) throw new Error(`Conversation delete failed (${r.status})`);
     state.conversations = state.conversations.filter(c => c.id !== id);
     if (state.currentConvId === id) newConversation();
     else renderConvList();
     toast(t('toast_insight_deleted'));
-  } catch(_) {}
+  } catch(_) { toast(t('chat_delete_error')); }
 }
 
 /* Sidebar (mobile) */
@@ -2331,58 +2414,195 @@ function hideTyping() {
   document.getElementById('typing-indicator')?.remove();
 }
 
-async function sendMessage() {
-  const inp     = document.getElementById('chat-input');
+function newChatRequestId() {
+  if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+    return window.crypto.randomUUID();
+  }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}
+
+function hasPendingChatFailure() {
+  for (const pending of state.failedChatRequests.values()) {
+    if (!pending.retryable) continue;
+    if (pending.conversationId !== null && pending.conversationId !== undefined) {
+      if (Number(pending.conversationId) === Number(state.currentConvId)) return true;
+    } else if (state.currentConvId === null && pending.viewRevision === state.chatViewRevision) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function appendChatError(pending) {
+  const container = document.getElementById('chat-messages');
+  if (!container) return;
+  const alreadyShown = Array.from(container.querySelectorAll('.chat-error'))
+    .some(el => el.dataset.requestId === pending.requestId);
+  if (alreadyShown) return;
+
+  const row = document.createElement('div');
+  row.className = 'msg ai chat-error';
+  row.dataset.requestId = pending.requestId;
+  const bubble = document.createElement('div');
+  bubble.className = 'msg-bubble chat-error-note';
+  bubble.textContent = pending.errorCode === 'ai_unavailable'
+    ? t('chat_ai_unavailable')
+    : pending.errorCode === 'ai_timeout'
+      ? t('chat_ai_timeout')
+      : t('chat_ai_error');
+  row.appendChild(bubble);
+  if (pending.retryable) {
+    const retry = document.createElement('button');
+    retry.type = 'button';
+    retry.className = 'chat-retry-btn';
+    retry.textContent = t('chat_retry');
+    retry.addEventListener('click', () => retryChatRequest(pending.requestId));
+    row.appendChild(retry);
+  }
+  container.appendChild(row);
+  container.scrollTop = container.scrollHeight;
+}
+
+function updateConversationFromChat(data) {
+  if (!data.conversation || !data.conversation_id) return;
+  const conversation = data.conversation;
+  const existing = state.conversations.find(c => Number(c.id) === Number(data.conversation_id));
+  if (existing) {
+    Object.assign(existing, conversation);
+    state.conversations = [existing, ...state.conversations.filter(c => c !== existing)];
+  } else {
+    state.conversations.unshift(conversation);
+  }
+  renderConvList();
+}
+
+function isOriginalChatView(pending, conversationId) {
+  if (pending.viewRevision !== state.chatViewRevision) return false;
+  if (pending.startedConversationId === null || pending.startedConversationId === undefined) {
+    return state.currentConvId === null;
+  }
+  return Number(state.currentConvId) === Number(conversationId);
+}
+
+async function submitChatRequest(pending) {
+  if (state.chatRequestInFlight) return;
+  state.chatRequestInFlight = true;
+  const inp = document.getElementById('chat-input');
   const sendBtn = document.getElementById('send-btn');
-  if (!inp) return;
-  const text = inp.value.trim();
-  if (!text) return;
-
-  inp.value = '';
-  inp.style.height = '';
+  if (inp) inp.disabled = true;
   if (sendBtn) sendBtn.disabled = true;
-
-  appendMsg('user', text);
-  const historySnapshot = state.currentChatHistory.slice(-24);
-  state.currentChatHistory.push({ role: 'user', content: text });
-
   showTyping();
+
+  let failureData = {};
+  let failureStatus = null;
   try {
     const response = await fetch(`${API_BASE_URL}chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        message: text,
-        history: historySnapshot,
-        conversation_id: state.currentConvId
+        message: pending.text,
+        history: pending.historySnapshot,
+        conversation_id: pending.conversationId,
+        request_id: pending.requestId
       })
     });
-    const d = await response.json();
-    hideTyping();
-
-    const reply = d.reply || "I’m ready to help you examine the pattern. Try again.";
-    appendMsg('ai', reply);
-    state.currentChatHistory.push({ role: 'assistant', content: reply });
-
-    if (d.conversation_id) {
-      state.currentConvId = d.conversation_id;
-      document.getElementById('chat-conv-title').textContent = d.conversation?.title || t('new_chat');
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || typeof data.reply !== 'string' || !data.reply.trim()) {
+      failureData = data;
+      failureStatus = response.status;
+      throw new Error('Chat request failed.');
     }
-    if (d.is_new_conversation && d.conversation) {
-      state.conversations.unshift(d.conversation);
-    } else {
-      const ex = state.conversations.find(c => c.id === d.conversation_id);
-      if (ex && d.conversation) {
-        Object.assign(ex, d.conversation);
-        state.conversations = [ex, ...state.conversations.filter(c => c.id !== ex.id)];
-      }
+
+    state.failedChatRequests.delete(pending.requestId);
+    updateConversationFromChat(data);
+    const responseConversationId = Number(data.conversation_id);
+    if (isOriginalChatView(pending, responseConversationId)) {
+      if (state.currentConvId === null) state.currentConvId = responseConversationId;
+      document.getElementById('chat-conv-title').textContent =
+        data.conversation?.title || t('new_chat');
+      appendMsg('ai', data.reply);
+      state.currentChatHistory.push({ role: 'assistant', content: data.reply });
+    } else if (Number(state.currentConvId) === responseConversationId) {
+      // A conversation was reopened while the request was in flight; reload
+      // its committed messages rather than appending into a stale view.
+      await selectConversation(responseConversationId);
     }
     renderConvList();
   } catch(_) {
     hideTyping();
-    appendMsg('ai', "I couldn’t complete that insight just now. Try again?");
+    const serverConversationId = failureData.conversation_id;
+    const originalView = serverConversationId
+      ? isOriginalChatView(pending, serverConversationId)
+      : pending.viewRevision === state.chatViewRevision &&
+        Number(state.currentConvId) === Number(pending.startedConversationId);
+    if (serverConversationId) {
+      pending.conversationId = Number(serverConversationId);
+      updateConversationFromChat(failureData);
+    }
+    pending.errorCode = failureData.error?.code || null;
+    pending.retryable = !(failureStatus >= 400 && failureStatus < 500);
+    if (pending.retryable) state.failedChatRequests.set(pending.requestId, pending);
+    else state.failedChatRequests.delete(pending.requestId);
+
+    if (originalView && serverConversationId && state.currentConvId === null) {
+      state.currentConvId = Number(serverConversationId);
+      document.getElementById('chat-conv-title').textContent =
+        failureData.conversation?.title || t('new_chat');
+    }
+    if (originalView) appendChatError(pending);
+    if (serverConversationId && Number(state.currentConvId) === Number(serverConversationId) &&
+        pending.viewRevision !== state.chatViewRevision) {
+      await selectConversation(Number(serverConversationId));
+    }
+    renderConvList();
+  } finally {
+    hideTyping();
+    state.chatRequestInFlight = false;
+    if (inp) inp.disabled = false;
+    if (sendBtn) sendBtn.disabled = false;
   }
-  if (sendBtn) sendBtn.disabled = false;
+}
+
+async function retryChatRequest(requestId) {
+  const pending = state.failedChatRequests.get(requestId);
+  if (!pending || !pending.retryable || state.chatRequestInFlight) return;
+  pending.viewRevision = state.chatViewRevision;
+  pending.startedConversationId = state.currentConvId;
+  if (pending.conversationId === null || pending.conversationId === undefined) {
+    pending.conversationId = state.currentConvId;
+  }
+  document.querySelectorAll('.chat-error').forEach(el => {
+    if (el.dataset.requestId === requestId) el.remove();
+  });
+  await submitChatRequest(pending);
+}
+
+async function sendMessage() {
+  const inp     = document.getElementById('chat-input');
+  const sendBtn = document.getElementById('send-btn');
+  if (!inp) return;
+  if (state.chatRequestInFlight) return;
+  if (hasPendingChatFailure()) {
+    toast(t('chat_retry_first'));
+    return;
+  }
+  const text = inp.value.trim();
+  if (!text) return;
+
+  inp.value = '';
+  inp.style.height = '';
+  const pending = {
+    text,
+    requestId: newChatRequestId(),
+    conversationId: state.currentConvId,
+    startedConversationId: state.currentConvId,
+    viewRevision: state.chatViewRevision,
+    historySnapshot: state.currentChatHistory.slice(-24),
+    retryable: true
+  };
+  appendMsg('user', text);
+  state.currentChatHistory.push({ role: 'user', content: text });
+  await submitChatRequest(pending);
 }
 
 function sendStarter(el) {
@@ -2526,7 +2746,7 @@ async function saveMood() {
     loadHomeInsight();
     updateMoodTodayBanner();
   } catch(_) { toast(t('mood_save_error')); }
-  if (saveBtn) saveBtn.disabled = true;
+  if (saveBtn) saveBtn.disabled = !state.selectedMood;
 }
 
 function editMood(id) {
@@ -2577,11 +2797,12 @@ async function deleteMood(id) {
 async function loadMoodHistory() {
   try {
     const r = await fetch(`${API_BASE_URL}mood`);
+    if (!r.ok) throw new Error(`Mood load failed (${r.status})`);
     const d = await r.json();
     state.moods = d.moods || [];
     renderMoodHistory();
     updateMoodTodayBanner();
-  } catch(_) {}
+  } catch(_) { toast(t('mood_load_error')); }
 }
 
 function updateMoodTodayBanner() {
@@ -2727,14 +2948,17 @@ function showSleepResult(rec) {
 async function saveSleep() {
   const bedtime = document.getElementById('sleep-bedtime')?.value;
   const wakeup  = document.getElementById('sleep-wakeup')?.value;
+  const saveBtn = document.getElementById('sleep-save-btn');
   setSleepFormError('');
 
   if (!bedtime || !wakeup) {
     setSleepFormError(t('sleep_invalid_error'));
     return;
   }
+  if (saveBtn?.disabled) return;
 
   const isEditing = editingSleepId !== null;
+  if (saveBtn) saveBtn.disabled = true;
   try {
     const r = await fetch(`${API_BASE_URL}sleep`, {
       method: isEditing ? 'PATCH' : 'POST',
@@ -2742,7 +2966,11 @@ async function saveSleep() {
       body: JSON.stringify(
         isEditing
           ? { id: editingSleepId, bedtime, wakeup }
-          : { bedtime, wakeup }
+          : {
+              bedtime,
+              wakeup,
+              sleep_start_date: getLocalSleepStartDate(bedtime, wakeup)
+            }
       )
     });
     const d = await r.json();
@@ -2765,6 +2993,8 @@ async function saveSleep() {
     await loadHomeInsight();
   } catch(_) {
     setSleepFormError(t('sleep_save_error'));
+  } finally {
+    if (saveBtn) saveBtn.disabled = false;
   }
 }
 
@@ -2821,7 +3051,7 @@ async function loadSleepHistory() {
     if (!r.ok) throw new Error(d.error || 'Could not load sleep data.');
     state.sleep = d.records || [];
     renderSleepHistory();
-  } catch(_) {}
+  } catch(_) { toast(t('sleep_load_error')); }
 }
 
 function renderSleepHistory() {
