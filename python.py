@@ -523,29 +523,60 @@ def sync_manual_mood_signal(db, date, timestamp):
             (date,),
         )
 
-def analyze_behavior_patterns(db):
+
+def _structured_home_insight(
+    lang,
+    rule_id,
+    title_en,
+    title_ar,
+    observation_en,
+    observation_ar,
+    evidence_en,
+    evidence_ar,
+    period,
+    observation_days,
+    sample_en,
+    sample_ar,
+    interpretation_en=None,
+    interpretation_ar=None,
+    action_en=None,
+    action_ar=None,
+):
+    """Build the small, localized payload rendered by the home insight card."""
+    def localized(en, ar):
+        return ar if lang == "ar" else en
+
+    def iso(value):
+        return value.isoformat() if isinstance(value, (datetime.date, datetime.datetime)) else value
+
+    return {
+        "title": localized(title_en, title_ar),
+        "observation": localized(observation_en, observation_ar),
+        "evidence": localized(evidence_en, evidence_ar),
+        "interpretation": localized(interpretation_en, interpretation_ar)
+            if interpretation_en and interpretation_ar else None,
+        "action": localized(action_en, action_ar)
+            if action_en and action_ar else None,
+        "rule_id": rule_id,
+        "observation_days": sorted({iso(day) for day in observation_days if day}),
+        "period": {key: iso(value) for key, value in period.items() if value},
+        "sample_description": localized(sample_en, sample_ar),
+        "language": lang,
+    }
+
+
+def analyze_behavior_patterns(db, lang="en", today=None):
     """
     Rule-based Behavior Analysis Engine (no ML).
 
-    Reads the existing mood / sleep / task tables and cross-references them
-    to surface behavioral relationships:
-      1. Mood <-> productivity
-      2. Sleep/recovery <-> productivity
-      3. Mood <-> task completion
-      4. Sleep <-> mood
-      5. Recent trends (this week vs last week, best weekday)
-      6. Task backlog
-      7. Consistency over time (recovery variance, stress streaks)
-
-    Returns (candidates, ctx) where candidates is a list of
-    (score, insight_en, insight_ar, tag) tuples — every tuple is backed by
-    real stored data, never invented. ctx carries the raw slices used, so
-    callers can build an honest fallback when no rule fires.
+    Returns (candidates, ctx). Candidate priority is internal and is never
+    exposed as an evidence or confidence score.
     """
-    today = today_utc()
+    today = today or today_utc()
     week_start = today - datetime.timedelta(days=6)
     previous_week_start = today - datetime.timedelta(days=13)
     yesterday = today - datetime.timedelta(days=1)
+    recent_window_start = today - datetime.timedelta(days=27)
 
     moods = rows_to_list(db.execute(
         "SELECT mood, date FROM moods ORDER BY date DESC, id DESC LIMIT 60"
@@ -560,16 +591,14 @@ def analyze_behavior_patterns(db):
         """
         SELECT signal, confidence, source, date, timestamp
         FROM behavioral_signals
-        WHERE date >= ?
+        WHERE source='conversation' AND signal='stress'
+          AND confidence IN ('high', 'medium')
+          AND date >= ? AND date <= ?
         ORDER BY date DESC, id DESC
         LIMIT 40
         """,
-        (week_start.isoformat(),),
+        (week_start.isoformat(), today.isoformat()),
     ).fetchall())
-    recent_history = db.execute(
-        "SELECT COUNT(*) FROM messages WHERE timestamp >= ?",
-        (week_start.isoformat(),),
-    ).fetchone()[0]
 
     def task_date(task):
         """The date a task is "about" for behavioral analysis.
@@ -597,59 +626,47 @@ def analyze_behavior_patterns(db):
     def is_done(task):
         return task.get("status") == "done" or bool(task.get("completed"))
 
-    def completion_rate(items):
-        return (sum(1 for t in items if is_done(t)) / len(items)) if items else None
+    def completion_counts(items):
+        return sum(1 for task in items if is_done(task)), len(items)
 
     recent_tasks = tasks_in_range(week_start, today)
     previous_tasks = tasks_in_range(previous_week_start, week_start - datetime.timedelta(days=1))
-    recent_rate = completion_rate(recent_tasks)
-    previous_rate = completion_rate(previous_tasks)
     yesterday_tasks = tasks_in_range(yesterday, yesterday)
+    window_tasks = tasks_in_range(recent_window_start, today)
+    task_by_date = {}
+    for task in tasks:
+        day = task_date(task)
+        if day is not None and day <= today:
+            task_by_date.setdefault(day, []).append(task)
 
-    latest_mood = next((m for m in moods if _date_from_timestamp(m.get("date"))), None)
-
-    recent_moods = [
-        m["mood"] for m in moods
-        if (d := _date_from_timestamp(m.get("date"))) is not None and d >= week_start
-    ]
-    stressed_count = sum(mood == "stressed" for mood in recent_moods)
-    conversation_signals = [
-        signal for signal in behavioral_signals
-        if signal.get("source") == "conversation"
-    ]
     conversation_stress_dates = {
         _date_from_timestamp(signal.get("date"))
-        for signal in conversation_signals
-        if signal.get("signal") == "stress"
+        for signal in behavioral_signals
     } - {None}
     conversation_stress_count = len(conversation_stress_dates)
-    recent_signal_names = {
-        signal.get("signal") for signal in conversation_signals
-    }
 
-    # One mood value per calendar day (moods are ordered date DESC, id DESC,
-    # so the first hit for a given day is already the latest entry for it).
+    # Use only the latest mood for each recorded UTC calendar date.
     mood_by_date = {}
     for m in moods:
         d = _date_from_timestamp(m.get("date"))
-        if d and d not in mood_by_date:
+        if d and d <= today and d not in mood_by_date:
             mood_by_date[d] = m["mood"]
 
-    # Sum every session that belongs to the same recovery day (multiple
-    # sleep sessions on one day are separate rows but one combined total).
-    sleep_by_date = {}
-    for r in sleeps:
-        d = _date_from_timestamp(r.get("date"))
-        if d:
-            sleep_by_date[d] = sleep_by_date.get(d, 0.0) + float(r["duration_hours"])
+    latest_mood_date = max(mood_by_date, default=None)
+    latest_mood = (
+        {"mood": mood_by_date[latest_mood_date], "date": latest_mood_date.isoformat()}
+        if latest_mood_date else None
+    )
+    stressed_dates_week = {
+        day for day, mood in mood_by_date.items()
+        if week_start <= day <= today and mood == "stressed"
+    }
 
-    # Main/overnight sleep only (naps excluded) — used for recovery-quality
-    # judgments below, so a quick nap is never read as "insufficient sleep"
-    # or as evidence of a strong/weak night's rest.
+    # Main/overnight sleep only; naps are excluded from recovery comparisons.
     main_sleep_by_date = {}
     for r in sleeps:
         d = _date_from_timestamp(r.get("date"))
-        if not d:
+        if not d or d > today:
             continue
         hours = float(r["duration_hours"])
         if classify_sleep_session(r.get("bedtime"), hours) != "main":
@@ -657,29 +674,20 @@ def analyze_behavior_patterns(db):
         if d not in main_sleep_by_date or hours > main_sleep_by_date[d]:
             main_sleep_by_date[d] = hours
 
-    # `sleeps` is ordered date DESC; find the most recent day that actually
-    # has a main/overnight session (a nap-only day doesn't count as "latest sleep").
-    latest_sleep_date = next(
-        (d for d in (_date_from_timestamp(r.get("date")) for r in sleeps) if d and d in main_sleep_by_date),
-        None,
-    )
+    latest_sleep_date = max(main_sleep_by_date, default=None)
     latest_sleep_hours = main_sleep_by_date.get(latest_sleep_date) if latest_sleep_date else None
 
-    # ── Sleep vs productivity ──────────────────────────────────────────
-    well_rested_tasks = [t for t in tasks if task_date(t) in sleep_by_date and sleep_by_date[task_date(t)] >= 7]
-    short_recovery_tasks = [t for t in tasks if task_date(t) in sleep_by_date and sleep_by_date[task_date(t)] < 7]
-    well_rested_rate = completion_rate(well_rested_tasks)
-    short_recovery_rate = completion_rate(short_recovery_tasks)
-
-    # ── Mood vs productivity / task completion ─────────────────────────
-    positive_mood_tasks = [t for t in tasks if mood_by_date.get(task_date(t)) in POSITIVE_MOODS]
-    negative_mood_tasks = [t for t in tasks if mood_by_date.get(task_date(t)) in NEGATIVE_MOODS]
-    positive_mood_rate = completion_rate(positive_mood_tasks)
-    negative_mood_rate = completion_rate(negative_mood_tasks)
-
-    # ── Sleep vs mood ───────────────────────────────────────────────────
-    positive_mood_sleep = [sleep_by_date[d] for d in sleep_by_date if mood_by_date.get(d) in POSITIVE_MOODS]
-    negative_mood_sleep = [sleep_by_date[d] for d in sleep_by_date if mood_by_date.get(d) in NEGATIVE_MOODS]
+    # Mood/task comparisons use distinct recorded dates within a fixed
+    # 28-day window. Missing dates are absent observations, not zeroes.
+    mood_task_groups = {"positive": {}, "negative": {}}
+    for day, day_tasks in task_by_date.items():
+        if not recent_window_start <= day <= today:
+            continue
+        mood = mood_by_date.get(day)
+        if mood in POSITIVE_MOODS:
+            mood_task_groups["positive"][day] = day_tasks
+        elif mood in NEGATIVE_MOODS:
+            mood_task_groups["negative"][day] = day_tasks
 
     # ── Task backlog ─────────────────────────────────────────────────────
     stale_cutoff = today - datetime.timedelta(days=3)
@@ -688,17 +696,27 @@ def analyze_behavior_patterns(db):
         if not is_done(t) and task_date(t) is not None and task_date(t) <= stale_cutoff
     ]
 
-    # ── Consistency over time ───────────────────────────────────────────
-    week_sleep_hours = [sleep_by_date[d] for d in sleep_by_date if d >= week_start]
+    # Recorded main-sleep dates only; missing dates are not filled in.
+    week_main_sleep = {
+        day: hours for day, hours in main_sleep_by_date.items()
+        if week_start <= day <= today
+    }
 
-    consecutive_stressed = 0
-    if mood_by_date:
-        cursor = max(mood_by_date.keys())
-        while mood_by_date.get(cursor) == "stressed":
-            consecutive_stressed += 1
+    # A streak is current only when its last logged day is no more than two
+    # days old, and every calendar date in the streak has a stressed entry.
+    consecutive_stressed_dates = []
+    if (
+        latest_mood_date
+        and latest_mood_date >= today - datetime.timedelta(days=2)
+        and mood_by_date.get(latest_mood_date) == "stressed"
+    ):
+        cursor = latest_mood_date
+        while cursor >= week_start and mood_by_date.get(cursor) == "stressed":
+            consecutive_stressed_dates.append(cursor)
             cursor -= datetime.timedelta(days=1)
+    consecutive_stressed_dates.reverse()
 
-    # ── Most productive weekday this week ───────────────────────────────
+    # ── Most tasks completed by weekday this week ────────────────────────
     weekday_completed = {}
     for t in recent_tasks:
         if is_done(t):
@@ -706,241 +724,457 @@ def analyze_behavior_patterns(db):
             if d:
                 weekday_completed[d.weekday()] = weekday_completed.get(d.weekday(), 0) + 1
 
-    candidates = []  # (score, insight_en, insight_ar, tag)
+    candidates = []  # (internal_priority, structured_insight)
 
-    # Perfect day yesterday
+    def add_candidate(priority, **fields):
+        candidates.append((
+            priority,
+            _structured_home_insight(lang=lang, **fields),
+        ))
+
+    task_sample_en = (
+        "Task dates use completion dates for completed tasks and creation dates "
+        "for open tasks; current status is used because status history is not stored."
+    )
+    task_sample_ar = (
+        "يُحتسب تاريخ إنجاز المهمة المكتملة، وتاريخ إنشاء المهمة المفتوحة؛ "
+        "وتُستخدم الحالة الحالية لأن سجل تغيّر الحالات غير محفوظ."
+    )
+
+    # Factual yesterday count; creation/completion dates are not planned dates.
     if len(yesterday_tasks) >= 2 and all(is_done(t) for t in yesterday_tasks):
-        candidates.append((
+        count = len(yesterday_tasks)
+        add_candidate(
             100,
-            "Yesterday you completed all planned tasks.",
-            "أمس أنجزت كل المهام التي خططت لها.",
-            "perfect_day",
-        ))
+            rule_id="perfect_day",
+            title_en="Yesterday's tasks",
+            title_ar="مهام أمس",
+            observation_en=f"All {count} tasks associated with yesterday were marked complete.",
+            observation_ar=f"تم وضع علامة الإنجاز على جميع المهام المرتبطة بأمس وعددها {count}.",
+            evidence_en=f"{count} of {count} associated tasks were marked complete on {yesterday.isoformat()}.",
+            evidence_ar=f"تم إنجاز {count} من أصل {count} مهمة مرتبطة بتاريخ {yesterday.isoformat()}.",
+            period={"start": yesterday, "end": yesterday},
+            observation_days=[yesterday],
+            sample_en=task_sample_en,
+            sample_ar=task_sample_ar,
+        )
 
-    # 2) Sleep/recovery and productivity
+    # Mood/task comparison: latest mood per date and a distinct-day minimum.
+    positive_days = mood_task_groups["positive"]
+    negative_days = mood_task_groups["negative"]
+    positive_tasks = [task for day_tasks in positive_days.values() for task in day_tasks]
+    negative_tasks = [task for day_tasks in negative_days.values() for task in day_tasks]
+    positive_done, positive_total = completion_counts(positive_tasks)
+    negative_done, negative_total = completion_counts(negative_tasks)
     if (
-        well_rested_rate is not None and short_recovery_rate is not None
-        and len(well_rested_tasks) >= 2 and len(short_recovery_tasks) >= 2
-        and well_rested_rate > short_recovery_rate
+        len(positive_days) >= 4 and len(negative_days) >= 4
+        and positive_total and negative_total
+        and positive_done / positive_total > negative_done / negative_total
     ):
-        candidates.append((
-            95,
-            "You tend to complete more tasks after getting at least 7 hours of sleep.",
-            "عادةً تنجز مهاماً أكثر بعد الحصول على 7 ساعات نوم أو أكثر.",
-            "sleep_productivity",
-        ))
-
-    # 1 & 3) Mood and productivity / task completion
-    if (
-        positive_mood_rate is not None and negative_mood_rate is not None
-        and len(positive_mood_tasks) >= 2 and len(negative_mood_tasks) >= 2
-        and positive_mood_rate > negative_mood_rate
-    ):
-        candidates.append((
+        add_candidate(
             93,
-            "Your task completion is higher on days when your mood is positive.",
-            "إنجازك للمهام أعلى في الأيام التي يكون فيها مزاجك إيجابياً.",
-            "mood_productivity",
-        ))
+            rule_id="mood_productivity",
+            title_en="Task completion and logged mood",
+            title_ar="إنجاز المهام والمزاج المسجّل",
+            observation_en=(
+                f"On {len(positive_days)} days with a positive mood entry, {positive_done} "
+                f"of {positive_total} associated tasks were marked complete; on "
+                f"{len(negative_days)} sad or stressed mood days, {negative_done} of "
+                f"{negative_total} were."
+            ),
+            observation_ar=(
+                f"في {len(positive_days)} أيام سُجّل فيها مزاج إيجابي، أُنجزت {positive_done} "
+                f"من أصل {positive_total} مهمة مرتبطة؛ وفي {len(negative_days)} أيام "
+                f"سُجّل فيها الحزن أو التوتر، أُنجزت {negative_done} من أصل {negative_total}."
+            ),
+            evidence_en=(
+                f"Positive mood: {positive_done}/{positive_total} tasks across {len(positive_days)} days. "
+                f"Sad/stressed mood: {negative_done}/{negative_total} tasks across {len(negative_days)} days."
+            ),
+            evidence_ar=(
+                f"مزاج إيجابي: {positive_done}/{positive_total} مهمة عبر {len(positive_days)} أيام. "
+                f"حزن/توتر: {negative_done}/{negative_total} مهمة عبر {len(negative_days)} أيام."
+            ),
+            period={"start": recent_window_start, "end": today},
+            observation_days=list(positive_days) + list(negative_days),
+            sample_en=(
+                "28-day window; only distinct dates with a mood entry and at least one associated task "
+                "are counted. The latest mood on each date is used; task status is current, not historical."
+            ),
+            sample_ar=(
+                "نافذة 28 يوماً؛ تُحتسب الأيام المختلفة التي تضم إشارة مزاج ومهمة واحدة على الأقل. "
+                "تُستخدم أحدث إشارة مزاج في كل يوم، وحالة المهمة هي الحالية وليست التاريخية."
+            ),
+            interpretation_en=(
+                "This is a limited overlap in logged data, not evidence that mood caused task completion."
+            ),
+            interpretation_ar=(
+                "هذا تداخل محدود في البيانات المسجّلة، ولا يثبت أن المزاج سبّب إنجاز المهام."
+            ),
+        )
 
-    # 5) Recent trend — productivity vs last week
+    # Compare task completion, not productivity. Show both exact date ranges.
+    current_done, current_total = completion_counts(recent_tasks)
+    previous_done, previous_total = completion_counts(previous_tasks)
+    current_task_days = {task_date(task) for task in recent_tasks if task_date(task)}
+    previous_task_days = {task_date(task) for task in previous_tasks if task_date(task)}
     if (
-        recent_rate is not None and previous_rate is not None
-        and len(recent_tasks) >= 2 and len(previous_tasks) >= 2
+        current_total >= 2 and previous_total >= 2
+        and len(current_task_days) >= 2 and len(previous_task_days) >= 2
+        and current_done / current_total != previous_done / previous_total
     ):
-        if recent_rate > previous_rate:
-            candidates.append((
-                90,
-                "Your productivity has improved compared with last week.",
-                "إنتاجيتك تحسنت مقارنة بالأسبوع الماضي.",
-                "trend_up",
-            ))
-        elif recent_rate < previous_rate:
-            candidates.append((
-                78,
-                "Your task completion has slowed down compared with last week.",
-                "إنجازك للمهام تباطأ مقارنة بالأسبوع الماضي.",
-                "trend_down",
-            ))
+        is_up = current_done / current_total > previous_done / previous_total
+        title_en = "Task completion this week"
+        title_ar = "إنجاز المهام هذا الأسبوع"
+        verb_en = "increased" if is_up else "was lower"
+        verb_ar = "ارتفع" if is_up else "انخفض"
+        add_candidate(
+            90 if is_up else 78,
+            rule_id="trend_up" if is_up else "trend_down",
+            title_en=title_en,
+            title_ar=title_ar,
+            observation_en=(
+                f"Task completion {verb_en} from {previous_done}/{previous_total} tasks "
+                f"in the previous 7 days to {current_done}/{current_total} in the current 7 days."
+            ),
+            observation_ar=(
+                f"{verb_ar} إنجاز المهام من {previous_done}/{previous_total} في الأيام السبعة السابقة "
+                f"إلى {current_done}/{current_total} في الأيام السبعة الحالية."
+            ),
+            evidence_en=(
+                f"Previous: {previous_done}/{previous_total}, "
+                f"{previous_week_start.isoformat()}–{(week_start - datetime.timedelta(days=1)).isoformat()}. "
+                f"Current: {current_done}/{current_total}, {week_start.isoformat()}–{today.isoformat()}."
+            ),
+            evidence_ar=(
+                f"الفترة السابقة: {previous_done}/{previous_total}، "
+                f"{previous_week_start.isoformat()}–{(week_start - datetime.timedelta(days=1)).isoformat()}. "
+                f"الفترة الحالية: {current_done}/{current_total}، {week_start.isoformat()}–{today.isoformat()}."
+            ),
+            period={
+                "start": week_start,
+                "end": today,
+                "comparison_start": previous_week_start,
+                "comparison_end": week_start - datetime.timedelta(days=1),
+            },
+            observation_days=list(current_task_days | previous_task_days),
+            sample_en=(
+                "Only dates with associated tasks are represented. Task dates use completion date "
+                "for done tasks and creation date for open tasks; task size and difficulty are unknown."
+            ),
+            sample_ar=(
+                "تُمثّل أيام المهام المسجّلة فقط. يُستخدم تاريخ الإنجاز للمهمة المكتملة وتاريخ الإنشاء للمفتوحة؛ "
+                "حجم المهمة وصعوبتها غير معروفين."
+            ),
+        )
 
-    # 6) Task backlog
+    # Open-task count only; no claim about historical backlog growth.
     if len(backlog_tasks) >= 3:
-        candidates.append((
+        backlog_days = [task_date(task) for task in backlog_tasks if task_date(task)]
+        oldest_backlog_day = min(backlog_days, default=stale_cutoff)
+        add_candidate(
             91,
-            f"You have {len(backlog_tasks)} tasks that have been pending for several days — your backlog is growing.",
-            f"لديك {len(backlog_tasks)} مهام معلّقة منذ عدة أيام — قائمة مهامك المتراكمة تكبر.",
-            "backlog",
-        ))
+            rule_id="backlog",
+            title_en="Open tasks created at least 3 days ago",
+            title_ar="مهام مفتوحة أُنشئت قبل 3 أيام أو أكثر",
+            observation_en=(
+                f"You have {len(backlog_tasks)} open tasks created at least 3 days ago."
+            ),
+            observation_ar=(
+                f"لديك {len(backlog_tasks)} مهام مفتوحة أُنشئت قبل 3 أيام أو أكثر."
+            ),
+            evidence_en=(
+                f"{len(backlog_tasks)} tasks currently marked todo or active; "
+                f"the oldest was created on {oldest_backlog_day.isoformat()}."
+            ),
+            evidence_ar=(
+                f"{len(backlog_tasks)} مهمة حالتها الحالية «قائمة» أو «نشطة»؛ "
+                f"أقدمها أُنشئت بتاريخ {oldest_backlog_day.isoformat()}."
+            ),
+            period={"start": oldest_backlog_day, "end": stale_cutoff},
+            observation_days=backlog_days,
+            sample_en="Open-task age is based on created_at and current task status.",
+            sample_ar="عمر المهمة المفتوحة محسوب من تاريخ إنشائها وحالتها الحالية.",
+            action_en="If useful, review whether any of these tasks still belong on your list.",
+            action_ar="إذا كان ذلك مناسباً لك، راجع ما إذا كانت هذه المهام ما زالت بحاجة للبقاء في قائمتك.",
+        )
 
-    # 7) Consistency — consecutive stressed days
-    if consecutive_stressed >= 3:
-        candidates.append((
+    # Recent, genuinely consecutive manually logged stressed moods.
+    if len(consecutive_stressed_dates) >= 3:
+        streak_count = len(consecutive_stressed_dates)
+        streak_start = consecutive_stressed_dates[0]
+        streak_end = consecutive_stressed_dates[-1]
+        add_candidate(
             88,
-            f"You've reported stressed moods for {consecutive_stressed} consecutive days.",
-            f"سجّلت مزاجاً متوتراً لمدة {consecutive_stressed} أيام متتالية.",
-            "stress_streak",
-        ))
-    elif stressed_count >= 3:
-        candidates.append((
+            rule_id="stress_streak",
+            title_en="Consecutive stressed mood entries",
+            title_ar="إشارات مزاج متوتر في أيام متتالية",
+            observation_en=(
+                f"You logged a stressed mood for {streak_count} consecutive days, "
+                f"from {streak_start.isoformat()} to {streak_end.isoformat()}."
+            ),
+            observation_ar=(
+                f"سجّلت مزاجاً متوتراً في {streak_count} أيام متتالية، "
+                f"من {streak_start.isoformat()} إلى {streak_end.isoformat()}."
+            ),
+            evidence_en=f"{streak_count} distinct consecutive mood dates; latest entry is within the last 3 calendar days.",
+            evidence_ar=f"{streak_count} تواريخ مزاج مختلفة ومتتالية؛ أحدث إشارة ضمن آخر 3 أيام تقويمية.",
+            period={"start": streak_start, "end": streak_end},
+            observation_days=consecutive_stressed_dates,
+            sample_en="Based on manually logged mood entries; missing dates break the streak.",
+            sample_ar="تعتمد على إشارات المزاج المسجّلة يدوياً؛ الأيام غير المسجّلة تقطع التتابع.",
+        )
+    elif len(stressed_dates_week) >= 3:
+        add_candidate(
             84,
-            "You've reported stress signals on several days this week.",
-            "سجّلت إشارات ضغط في عدة أيام هذا الأسبوع.",
-            "stress_week",
-        ))
+            rule_id="stress_week",
+            title_en="Stressed mood entries this week",
+            title_ar="إشارات مزاج متوتر هذا الأسبوع",
+            observation_en=(
+                f"You logged a stressed mood on {len(stressed_dates_week)} distinct days "
+                "in the last 7 calendar days."
+            ),
+            observation_ar=(
+                f"سجّلت مزاجاً متوتراً في {len(stressed_dates_week)} أيام مختلفة "
+                "خلال آخر 7 أيام تقويمية."
+            ),
+            evidence_en=(
+                f"{len(stressed_dates_week)} distinct dates with a stressed mood, "
+                f"{week_start.isoformat()}–{today.isoformat()}."
+            ),
+            evidence_ar=(
+                f"{len(stressed_dates_week)} تواريخ مختلفة بإشارة مزاج متوتر، "
+                f"{week_start.isoformat()}–{today.isoformat()}."
+            ),
+            period={"start": week_start, "end": today},
+            observation_days=stressed_dates_week,
+            sample_en="Only the latest mood entry per UTC calendar date is counted; missing dates are not counted.",
+            sample_ar="تُحتسب أحدث إشارة مزاج في كل تاريخ UTC؛ الأيام غير المسجّلة لا تُحتسب.",
+        )
 
-    # Conversation stress is independent of the manually selected mood.
+    # Phrase matching is a heuristic, not a psychological measurement.
     if conversation_stress_count >= 3:
-        candidates.append((
+        add_candidate(
             89,
-            "You've expressed stress signals on several days this week.",
-            "عبّرت عن إشارات ضغط في عدة أيام هذا الأسبوع.",
-            "conversation_stress_week",
-        ))
+            rule_id="conversation_stress_week",
+            title_en="Stress-related wording in conversations",
+            title_ar="عبارات مرتبطة بالضغط في المحادثات",
+            observation_en=(
+                f"Pilo matched stress-related wording in your conversations on "
+                f"{conversation_stress_count} days this week."
+            ),
+            observation_ar=(
+                f"طابقت بيلو عبارات مرتبطة بالضغط في محادثاتك خلال "
+                f"{conversation_stress_count} أيام هذا الأسبوع."
+            ),
+            evidence_en=(
+                f"Phrase matches on {conversation_stress_count} distinct dates, "
+                f"{week_start.isoformat()}–{today.isoformat()}; low-confidence matches are excluded."
+            ),
+            evidence_ar=(
+                f"مطابقات عبارات في {conversation_stress_count} تواريخ مختلفة، "
+                f"{week_start.isoformat()}–{today.isoformat()}؛ استُبعدت المطابقات منخفضة الثقة."
+            ),
+            period={"start": week_start, "end": today},
+            observation_days=conversation_stress_dates,
+            sample_en=(
+                "A small phrase-matching heuristic on conversation text (medium/high confidence only); "
+                "not a psychological measurement."
+            ),
+            sample_ar=(
+                "مطابقة محدودة لعبارات في نص المحادثة (ثقة متوسطة أو عالية فقط)؛ "
+                "وليست قياساً نفسياً."
+            ),
+        )
 
-    # Only surface this combined observation when each part is present in the
-    # stored data: repeated conversation stress, short recovery, and backlog.
-    if (
-        conversation_stress_count >= 2
-        and latest_sleep_hours is not None
-        and latest_sleep_hours < 7
-        and len(backlog_tasks) >= 2
-    ):
-        candidates.append((
-            96,
-            "Your recent stress signals are appearing alongside lower recovery and a growing workload.",
-            "إشارات الضغط الأخيرة تظهر مع تعافٍ أقل وحِمل عمل متزايد.",
-            "stress_recovery_workload",
-        ))
-
-    # 4) Sleep and mood
-    if (
-        len(positive_mood_sleep) >= 2 and len(negative_mood_sleep) >= 2
-        and (sum(positive_mood_sleep) / len(positive_mood_sleep))
-            - (sum(negative_mood_sleep) / len(negative_mood_sleep)) >= 1.0
-    ):
-        candidates.append((
-            87,
-            "Your mood tends to dip on days that follow shorter sleep.",
-            "مزاجك يميل للانخفاض في الأيام التي تسبقها ساعات نوم أقل.",
-            "sleep_mood",
-        ))
-
-    # Low recovery while workload is active
-    if latest_sleep_hours is not None and latest_sleep_hours < 6 and len(recent_tasks) >= 2:
-        candidates.append((
-            86,
-            "Your recent recovery is low while your focus load is still active. It may be worth slowing down and focusing on what matters most.",
-            "تعافيك الأخير منخفض بينما لا يزال حِمل التركيز لديك نشطاً. قد يكون من المفيد التمهّل والتركيز على ما يهم أكثر.",
-            "recovery_focus_load",
-        ))
-
-    # 7) Consistency over time — recovery variance this week
-    if len(week_sleep_hours) >= 3:
+    # Sleep consistency is descriptive and based only on recorded main sleep.
+    week_sleep_days = sorted(week_main_sleep)
+    week_sleep_hours = [week_main_sleep[day] for day in week_sleep_days]
+    if len(week_sleep_hours) >= 4:
         spread = max(week_sleep_hours) - min(week_sleep_hours)
         if spread >= 3:
-            candidates.append((
-                81,
-                "Your recovery has been inconsistent this week — sleep duration has varied a lot night to night.",
-                "تعافيك كان غير منتظم هذا الأسبوع — تفاوتت ساعات نومك كثيراً من ليلة لأخرى.",
-                "sleep_inconsistent",
-            ))
-        elif spread <= 1 and len(week_sleep_hours) >= 4:
-            candidates.append((
-                60,
-                "Your recovery has been consistent this week, which is a solid foundation for steady focus.",
-                "تعافيك كان منتظماً هذا الأسبوع، وهذا أساس جيد لتركيز ثابت.",
-                "sleep_consistent",
-            ))
+            sleep_rule = "sleep_inconsistent"
+            title_en = "Recorded main-sleep range"
+            title_ar = "نطاق النوم الأساسي المسجّل"
+            observation_en = (
+                f"Recorded main sleep ranged from {min(week_sleep_hours):g} to "
+                f"{max(week_sleep_hours):g} hours across {len(week_sleep_days)} logged days."
+            )
+            observation_ar = (
+                f"تراوح النوم الأساسي المسجّل بين {min(week_sleep_hours):g} و"
+                f"{max(week_sleep_hours):g} ساعة عبر {len(week_sleep_days)} أيام مسجّلة."
+            )
+            priority = 81
+        elif spread <= 1:
+            sleep_rule = "sleep_consistent"
+            title_en = "Recorded main-sleep range"
+            title_ar = "نطاق النوم الأساسي المسجّل"
+            observation_en = (
+                f"Recorded main sleep ranged from {min(week_sleep_hours):g} to "
+                f"{max(week_sleep_hours):g} hours across {len(week_sleep_days)} logged days."
+            )
+            observation_ar = (
+                f"تراوح النوم الأساسي المسجّل بين {min(week_sleep_hours):g} و"
+                f"{max(week_sleep_hours):g} ساعة عبر {len(week_sleep_days)} أيام مسجّلة."
+            )
+            priority = 60
+        else:
+            sleep_rule = None
+        if sleep_rule:
+            add_candidate(
+                priority,
+                rule_id=sleep_rule,
+                title_en=title_en,
+                title_ar=title_ar,
+                observation_en=observation_en,
+                observation_ar=observation_ar,
+                evidence_en=(
+                    f"{len(week_sleep_days)} distinct days with main/overnight sleep recorded, "
+                    f"{week_start.isoformat()}–{today.isoformat()}; naps excluded."
+                ),
+                evidence_ar=(
+                    f"{len(week_sleep_days)} أيام مختلفة سُجّل فيها النوم الأساسي، "
+                    f"{week_start.isoformat()}–{today.isoformat()}؛ القيلولات مستثناة."
+                ),
+                period={"start": week_start, "end": today},
+                observation_days=week_sleep_days,
+                sample_en=(
+                    "Describes recorded main/overnight sleep only. Unlogged dates are omitted, "
+                    "so this is not a complete-week pattern."
+                ),
+                sample_ar=(
+                    "يصف النوم الأساسي المسجّل فقط. التواريخ غير المسجّلة مستثناة، "
+                    "لذلك لا يمثّل نمطاً لأسبوع كامل."
+                ),
+            )
 
-    # 5) Most productive weekday this week
+    # Describe the weekday with the highest unique count; do not call it productivity.
     if weekday_completed:
-        top_day, top_count = max(weekday_completed.items(), key=lambda kv: kv[1])
-        others_max = max([c for d, c in weekday_completed.items() if d != top_day], default=0)
-        if top_count >= 2 and top_count > others_max:
-            candidates.append((
+        top_day, top_count = max(weekday_completed.items(), key=lambda item: item[1])
+        other_counts = [count for day, count in weekday_completed.items() if day != top_day]
+        if top_count >= 2 and top_count > max(other_counts, default=0):
+            top_dates = {
+                task_date(task) for task in recent_tasks
+                if is_done(task) and task_date(task)
+                and task_date(task).weekday() == top_day
+            }
+            add_candidate(
                 65,
-                f"Your most productive day this week was {WEEKDAY_EN[top_day]}.",
-                f"أكثر يوم كنت فيه منتجاً هذا الأسبوع كان يوم {WEEKDAY_AR[top_day]}.",
-                "top_weekday",
-            ))
-
-    # Building picture — enough recent signals to start trusting the data
-    if recent_history >= 4 and len(recent_moods) >= 2:
-        candidates.append((
-            55,
-            "Your recent check-ins are building a clearer picture of your patterns.",
-            "تسجيلاتك الأخيرة ترسم صورة أوضح عن أنماطك.",
-            "building_picture",
-        ))
-
-    # Momentum window
-    if (
-        latest_mood and latest_mood["mood"] == "happy"
-        and latest_sleep_hours is not None and latest_sleep_hours >= 7
-    ):
-        candidates.append((
-            50,
-            "Your latest mood signal and recovery point to a strong momentum window.",
-            "إشارتك الأخيرة لمزاجك وتعافيك يشيران إلى فترة جيدة لبناء الزخم.",
-            "momentum",
-        ))
+                rule_id="top_weekday",
+                title_en="Most tasks completed",
+                title_ar="أكثر يوم أُنجزت فيه مهام",
+                observation_en=(
+                    f"{WEEKDAY_EN[top_day]} had the highest logged count: "
+                    f"{top_count} completed tasks in the last 7 days."
+                ),
+                observation_ar=(
+                    f"سجّل يوم {WEEKDAY_AR[top_day]} أعلى عدد: "
+                    f"{top_count} مهام منجزة خلال آخر 7 أيام."
+                ),
+                evidence_en=f"{top_count} completed tasks dated {', '.join(day.isoformat() for day in sorted(top_dates))}.",
+                evidence_ar=f"{top_count} مهام منجزة بتواريخ {', '.join(day.isoformat() for day in sorted(top_dates))}.",
+                period={"start": week_start, "end": today},
+                observation_days=top_dates,
+                sample_en=(
+                    "Counts tasks currently marked done; task size, difficulty, and status history "
+                    "are not measured."
+                ),
+                sample_ar=(
+                    "يعدّ المهام التي حالتها الحالية «منجزة»؛ ولا يقيس حجم المهمة أو صعوبتها "
+                    "ولا يحتفظ بتاريخ تغيّر حالتها."
+                ),
+            )
 
     ctx = {
         "moods": moods,
         "sleeps": sleeps,
         "tasks": tasks,
         "recent_tasks": recent_tasks,
-        "recent_moods": recent_moods,
         "latest_sleep_date": latest_sleep_date,
         "latest_sleep_hours": latest_sleep_hours,
         "latest_mood": latest_mood,
         "behavioral_signals": behavioral_signals,
-        "conversation_signal_names": recent_signal_names,
-        "conversation_stress_count": conversation_stress_count,
+        "mood_days_28": sorted(
+            day for day in mood_by_date if recent_window_start <= day <= today
+        ),
+        "main_sleep_days_28": sorted(
+            day for day in main_sleep_by_date if recent_window_start <= day <= today
+        ),
+        "task_days_28": sorted(
+            day for day in task_by_date if recent_window_start <= day <= today
+        ),
+        "tasks_28": window_tasks,
+        "conversation_stress_dates": sorted(conversation_stress_dates),
+        "today": today,
+        "recent_window_start": recent_window_start,
+        "week_start": week_start,
     }
     return candidates, ctx
 
 
-def generate_home_insight(db, lang="en"):
-    """Pick the strongest data-driven insight from the Behavior Analysis
-    Engine for the AI Behavioral Insight card. Never invents a pattern —
-    falls back to an honest 'not enough data yet' state instead."""
-    today = today_utc()
-    candidates, ctx = analyze_behavior_patterns(db)
-    total_signals = (
-        len(ctx["moods"])
-        + len(ctx["sleeps"])
-        + len(ctx["tasks"])
-        + len(ctx["behavioral_signals"])
+def generate_home_insight(db, lang="en", today=None):
+    """Return a localized, evidence-aware insight selected by internal priority."""
+    if lang not in ("en", "ar"):
+        lang = "en"
+    today = today or today_utc()
+    candidates, ctx = analyze_behavior_patterns(db, lang=lang, today=today)
+
+    if candidates:
+        highest_priority = max(priority for priority, _ in candidates)
+        strongest = [
+            insight for priority, insight in candidates
+            if priority == highest_priority
+        ]
+        return strongest[today.toordinal() % len(strongest)]
+
+    # Neutral tracking status. Each source stays separate; no summed "signal"
+    # count is treated as independent evidence.
+    mood_count = len(ctx["mood_days_28"])
+    sleep_count = len(ctx["main_sleep_days_28"])
+    task_count = len(ctx["tasks_28"])
+    task_day_count = len(ctx["task_days_28"])
+    conversation_count = len(ctx["conversation_stress_dates"])
+    evidence_en = (
+        f"Last 28 days: mood recorded on {mood_count} days; main/overnight sleep on "
+        f"{sleep_count} days; {task_count} tasks associated with {task_day_count} dates."
     )
-
-    if not candidates:
-        if ctx["latest_sleep_hours"] is not None and total_signals >= 3:
-            hours = ctx["latest_sleep_hours"]
-            if hours >= 7:
-                insight_en = "Your latest recovery record gives you a useful baseline for tracking focus and productivity."
-                insight_ar = "آخر سجل للتعافي يعطيك خط أساس مفيداً لمتابعة التركيز والإنتاجية."
-            else:
-                insight_en = "Your latest recovery record is a useful signal to compare with your focus and task completion."
-                insight_ar = "آخر سجل للتعافي إشارة مفيدة لمقارنتها مع تركيزك وإنجازك للمهام."
-        elif ctx["recent_tasks"] and total_signals >= 3:
-            insight_en = "Your focus plan is starting to take shape. Keep logging tasks so Pilo can surface stronger patterns."
-            insight_ar = "خطة تركيزك بدأت تتضح. استمر في تسجيل المهام ليكتشف بيلو أنماطاً أقوى."
-        elif ctx["behavioral_signals"]:
-            insight_en = "Your conversation check-ins are adding useful signals to your behavioral picture. Keep talking naturally so Pilo can connect the pattern over time."
-            insight_ar = "تسجيلاتك في المحادثة تضيف إشارات مفيدة لصورتك السلوكية. استمر في الحديث بعفوية حتى يربط بيلو النمط مع الوقت."
-        elif ctx["recent_moods"] and total_signals >= 3:
-            insight_en = "Your daily signals are the first layer of your behavioral picture. Keep logging to reveal patterns."
-            insight_ar = "إشاراتك اليومية هي الطبقة الأولى من صورتك السلوكية. استمر في التسجيل لاكتشاف الأنماط."
-        else:
-            insight_en = "Keep tracking for a few more days and Pilo will start identifying your personal patterns."
-            insight_ar = "استمر في التسجيل لبضعة أيام أخرى، وسيبدأ بيلو باكتشاف أنماطك الشخصية."
-        return insight_ar if lang == "ar" else insight_en
-
-    highest_score = max(score for score, _, _, _ in candidates)
-    strongest = [c for c in candidates if c[0] == highest_score]
-    chosen = strongest[today.toordinal() % len(strongest)]
-    return chosen[2] if lang == "ar" else chosen[1]
+    evidence_ar = (
+        f"آخر 28 يوماً: سُجّل المزاج في {mood_count} أيام؛ والنوم الأساسي في "
+        f"{sleep_count} أيام؛ وارتبطت {task_count} مهام بـ {task_day_count} تواريخ."
+    )
+    sample_en = (
+        "Counts are shown separately by source. Only recorded dates are counted; "
+        "unlogged days are not treated as zero. Main-sleep counts exclude naps."
+    )
+    sample_ar = (
+        "تُعرض الأعداد منفصلة حسب المصدر. تُحتسب التواريخ المسجّلة فقط؛ "
+        "ولا تُعامل الأيام غير المسجّلة كأنها صفر. أعداد النوم الأساسي تستثني القيلولات."
+    )
+    if conversation_count:
+        evidence_en += (
+            f" Stress-related wording was matched on {conversation_count} conversation dates "
+            "in the last 7 days."
+        )
+        evidence_ar += (
+            f" وطوبقت عبارات مرتبطة بالضغط في {conversation_count} تواريخ محادثة "
+            "خلال آخر 7 أيام."
+        )
+        sample_en += " Conversation matches are heuristic phrase matches, not a psychological measurement."
+        sample_ar += " مطابقات المحادثة تقديرات لعبارات وليست قياساً نفسياً."
+    return _structured_home_insight(
+        lang=lang,
+        rule_id="tracking_status",
+        title_en="No repeated pattern yet",
+        title_ar="لا يوجد نمط متكرر بعد",
+        observation_en="No repeated pattern met the current evidence rules.",
+        observation_ar="لم يستوفِ أي نمط متكرر قواعد الأدلة الحالية.",
+        evidence_en=evidence_en,
+        evidence_ar=evidence_ar,
+        period={"start": ctx["recent_window_start"], "end": today},
+        observation_days=[],
+        sample_en=sample_en,
+        sample_ar=sample_ar,
+    )
 
 
 # ── User context for AI ───────────────────────────────────────────────────────
@@ -1087,7 +1321,7 @@ BEHAVIORAL GUIDELINES:
 - an active_task or pending tasks alone do NOT mean the user is behind — only note a backlog if the data actually shows one (e.g. many long-pending tasks); otherwise reference the active task by name when relevant
 - only describe tasks as "completed today" using completed_today_count/completed_today_tasks — NEVER use previously_completed_count/previously_completed_tasks to claim something was done today; if completed_today_count is 0, say so plainly instead of citing historical completions as today's progress
 - previously_completed_tasks may be mentioned when relevant, but only framed as past/historical accomplishments, never as today's
-- mood happy + main sleep good + tasks progressing → reinforce the habits and routines supporting momentum
+- Do not infer momentum from a single mood and sleep record; describe only the logged observations unless repeated dated behavior supports a pattern.
 --- END SYSTEM DATA BLOCK ---"""
 
 
@@ -1098,6 +1332,7 @@ Your responses must be SHORT, CONCISE, and highly USEFUL. Get straight to the po
 You are thoughtful, observant, non-judgmental, and action-oriented. Never present yourself as a therapist or therapy chatbot, diagnose conditions, or imply clinical care.
 Use the user's history and structured data to identify patterns, possible triggers, sustainable routines, and productivity opportunities. Never claim to detect, diagnose, predict, or score burnout risk — you can talk about recovery, focus, habits, and recent activity instead.
 When evidence is limited, say so clearly and frame observations as possibilities rather than facts. Offer one or two practical next steps, not pressure.
+Never claim that sleep, mood, stress, or a task caused another outcome. Describe co-occurrence only when the supplied records support it; do not invent counts, dates, missing-day coverage, or patterns from one record. Treat unlogged days as unknown, not as zero or as evidence that something did not happen.
 Never use bullet points, markdown headers (#), or lists.
 Always pay close attention to the user's past messages to maintain a logical, connected, and coherent conversation.
 CRITICAL RULE 1: Remain strictly neutral on sensitive topics like religion and politics. Never engage in debates or take sides. Smoothly redirect to the user's feelings and well-being.

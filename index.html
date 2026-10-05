@@ -352,16 +352,42 @@
       text-transform: uppercase;
       letter-spacing: .6px;
     }
+    .home-insight-title {
+      font-size: 14px;
+      line-height: 1.4;
+      font-weight: 750;
+      color: var(--text-primary);
+      margin-top: 5px;
+    }
+    .home-insight-section { margin-top: 9px; }
+    .home-insight-section[hidden] { display: none; }
+    .home-insight-section-label {
+      font-size: 10px;
+      line-height: 1.4;
+      font-weight: 750;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: .45px;
+    }
     .home-insight-text {
       font-size: 13px;
       line-height: 1.5;
       color: var(--text-primary);
-      margin-top: 4px;
+      margin-top: 2px;
     }
     .home-insight-meta {
       font-size: 10px;
       color: var(--text-muted);
-      margin-top: 5px;
+      line-height: 1.45;
+      margin-top: 8px;
+      overflow-wrap: anywhere;
+    }
+    .home-insight-sample {
+      font-size: 10px;
+      color: var(--text-muted);
+      line-height: 1.45;
+      margin-top: 3px;
+      overflow-wrap: anywhere;
     }
     .home-hero {
       background: linear-gradient(145deg, #059669 0%, #0d9488 50%, #2dd4bf 100%);
@@ -1261,8 +1287,25 @@
           <div class="home-insight-icon">✦</div>
           <div class="home-insight-content">
             <div class="home-insight-label" data-i18n="insight_card_title">Pilo noticed</div>
-            <div class="home-insight-text" id="home-insight-text" data-i18n="insight_loading">Looking at your recent context...</div>
+            <div class="home-insight-title" id="home-insight-title"></div>
+            <div class="home-insight-section">
+              <div class="home-insight-section-label" data-i18n="insight_observation_label">Observation</div>
+              <div class="home-insight-text" id="home-insight-text" data-i18n="insight_loading">Looking at your recent context...</div>
+            </div>
+            <div class="home-insight-section">
+              <div class="home-insight-section-label" data-i18n="insight_evidence_label">Evidence</div>
+              <div class="home-insight-text" id="home-insight-evidence"></div>
+            </div>
+            <div class="home-insight-section" id="home-insight-interpretation-wrap" hidden>
+              <div class="home-insight-section-label" data-i18n="insight_interpretation_label">Interpretation</div>
+              <div class="home-insight-text" id="home-insight-interpretation"></div>
+            </div>
+            <div class="home-insight-section" id="home-insight-action-wrap" hidden>
+              <div class="home-insight-section-label" data-i18n="insight_action_label">Action</div>
+              <div class="home-insight-text" id="home-insight-action"></div>
+            </div>
             <div class="home-insight-meta" id="home-insight-meta"></div>
+            <div class="home-insight-sample" id="home-insight-sample"></div>
           </div>
         </div>
         <div class="home-hero">
@@ -1582,7 +1625,13 @@ const TRANSLATIONS = {
     insight_loading:     "Looking at your recent context...",
     insight_empty:       "Log a few signals, recovery records, or focus tasks to unlock a personalized insight.",
     insight_load_error:  "Could not load your insight right now.",
-    insight_updated:     "Personalized from your recent activity",
+    insight_observation_label: "Observation",
+    insight_evidence_label: "Evidence",
+    insight_interpretation_label: "Interpretation",
+    insight_action_label: "Action",
+    insight_period_label: "Period",
+    insight_previous_period: "Previous 7 days",
+    insight_sample_label: "How to read this",
     stat_tasks:          "Tracked Tasks", stat_active: "Active", stat_done: "Done", stat_sleep: "Last Recovery",
     quick_access:        "Quick Access",
     qcard_chat:          "Talk to Pilo", qcard_chat_sub: "Explore patterns and next steps",
@@ -1690,7 +1739,13 @@ const TRANSLATIONS = {
     insight_loading:     "بيلو يطّلع على سياقك الأخير...",
     insight_empty:       "سجّل بعض الإشارات أو التعافي أو مهام التركيز لتحصل على رؤية شخصية.",
     insight_load_error:  "تعذّر تحميل رؤيتك حالياً.",
-    insight_updated:     "مخصّصة بناءً على نشاطك الأخير",
+    insight_observation_label: "الملاحظة",
+    insight_evidence_label: "الدليل",
+    insight_interpretation_label: "التفسير",
+    insight_action_label: "خطوة مقترحة",
+    insight_period_label: "الفترة",
+    insight_previous_period: "الأيام السبعة السابقة",
+    insight_sample_label: "طريقة قراءة البيانات",
     stat_tasks:          "المهام المتابعة", stat_active: "نشط", stat_done: "منجز", stat_sleep: "آخر تعافٍ",
     quick_access:        "وصول سريع",
     qcard_chat:          "تكلم مع بيلو", qcard_chat_sub: "اكتشف الأنماط والخطوات التالية",
@@ -1976,21 +2031,85 @@ function refreshHomeStats() {
 
 async function loadHomeInsight() {
   const textEl = document.getElementById('home-insight-text');
-  const metaEl = document.getElementById('home-insight-meta');
   if (!textEl) return;
 
   textEl.textContent = t('insight_loading');
-  if (metaEl) metaEl.textContent = '';
+  const titleEl = document.getElementById('home-insight-title');
+  const evidenceEl = document.getElementById('home-insight-evidence');
+  const interpretationEl = document.getElementById('home-insight-interpretation');
+  const interpretationWrap = document.getElementById('home-insight-interpretation-wrap');
+  const actionEl = document.getElementById('home-insight-action');
+  const actionWrap = document.getElementById('home-insight-action-wrap');
+  const periodEl = document.getElementById('home-insight-meta');
+  const sampleEl = document.getElementById('home-insight-sample');
+  const cardEl = document.getElementById('home-insight-card');
+  if (titleEl) titleEl.textContent = '';
+  if (evidenceEl) evidenceEl.textContent = '';
+  if (interpretationEl) interpretationEl.textContent = '';
+  if (interpretationWrap) interpretationWrap.hidden = true;
+  if (actionEl) actionEl.textContent = '';
+  if (actionWrap) actionWrap.hidden = true;
+  if (periodEl) periodEl.textContent = '';
+  if (sampleEl) sampleEl.textContent = '';
+  if (cardEl) cardEl.lang = state.lang;
 
   try {
     const r = await fetch(`${API_BASE_URL}insights/home?lang=${encodeURIComponent(state.lang)}`);
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || `Insight request failed (${r.status})`);
-    textEl.textContent = d.insight || t('insight_empty');
-    if (metaEl && d.insight) metaEl.textContent = t('insight_updated');
+    const insight = d.insight;
+    if (typeof insight === 'string') {
+      textEl.textContent = insight || t('insight_empty');
+      return;
+    }
+    if (!insight || typeof insight !== 'object') {
+      textEl.textContent = t('insight_empty');
+      return;
+    }
+    if (titleEl) titleEl.textContent = insight.title || '';
+    textEl.textContent = insight.observation || t('insight_empty');
+    if (evidenceEl) evidenceEl.textContent = insight.evidence || '';
+    if (interpretationEl && interpretationWrap && insight.interpretation) {
+      interpretationEl.textContent = insight.interpretation;
+      interpretationWrap.hidden = false;
+    }
+    if (actionEl && actionWrap && insight.action) {
+      actionEl.textContent = insight.action;
+      actionWrap.hidden = false;
+    }
+    if (periodEl) {
+      const period = insight.period || {};
+      const formatRange = (start, end) => {
+        const first = formatInsightDate(start);
+        const last = formatInsightDate(end);
+        if (!first) return '';
+        return first === last || !last ? first : `${first} – ${last}`;
+      };
+      const current = formatRange(period.start, period.end);
+      const previous = formatRange(period.comparison_start, period.comparison_end);
+      const ranges = [];
+      if (current) ranges.push(`${t('insight_period_label')}: ${current}`);
+      if (previous) ranges.push(`${t('insight_previous_period')}: ${previous}`);
+      periodEl.textContent = ranges.join(' · ');
+    }
+    if (sampleEl && insight.sample_description) {
+      sampleEl.textContent = `${t('insight_sample_label')}: ${insight.sample_description}`;
+    }
   } catch(_) {
     textEl.textContent = t('insight_load_error');
   }
+}
+
+function formatInsightDate(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value || ''))) return '';
+  const date = new Date(`${value}T12:00:00Z`);
+  if (Number.isNaN(date.getTime())) return '';
+  return new Intl.DateTimeFormat(state.lang === 'ar' ? 'ar' : 'en', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'UTC'
+  }).format(date);
 }
 
 function todayStr() {
